@@ -73,6 +73,15 @@ export async function entityExists(
       return node?.type === 'COMPONENT' || node?.type === 'COMPONENT_SET'
     }
 
+    case 'variant': {
+      // A variant is a component *inside a set*. Checking the parent matters:
+      // pulling a variant out of its set makes it an ordinary component, and
+      // its notes should then be reported as orphaned rather than silently
+      // shown against something that is no longer a variant of anything.
+      const node = await figma.getNodeByIdAsync(entityId)
+      return node?.type === 'COMPONENT' && node.parent?.type === 'COMPONENT_SET'
+    }
+
     default: {
       const exhaustive: never = entityKind
       void exhaustive
@@ -143,6 +152,31 @@ export async function resolveEntity(
       host: style,
       name: style.name,
       structure: styleStructure(style, entityKind as StyleKind),
+    }
+  }
+
+  if (entityKind === 'variant') {
+    const node = await figma.getNodeByIdAsync(entityId)
+    if (!node || node.type !== 'COMPONENT' || node.parent?.type !== 'COMPONENT_SET') return null
+    const set = node.parent
+
+    return {
+      host: node,
+      name: node.name,
+      structure: {
+        typeLabel: `Variant of ${set.name}`,
+        parentName: set.name,
+        description: node.description || undefined,
+        // The combination itself, so the rendered markdown states which variant
+        // a rule belongs to rather than leaving it to the heading alone.
+        variants: [
+          {
+            id: node.id,
+            name: node.name,
+            properties: node.variantProperties ?? {},
+          },
+        ],
+      },
     }
   }
 

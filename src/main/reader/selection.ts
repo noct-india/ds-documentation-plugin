@@ -13,11 +13,15 @@ type DocumentableComponent = ComponentNode | ComponentSetNode
 /**
  * A component set is the documentation unit, so a selected variant resolves up
  * to its parent set rather than to itself.
+ *
+ * The variant is reported alongside it, which lets the viewer open showing the
+ * combination that was actually selected. It only steers the *picture*: notes
+ * still default to the set, and writing to a variant stays a deliberate choice.
  */
 function normalise(node: DocumentableComponent): SelectionTarget {
   if (node.type === 'COMPONENT' && node.parent?.type === 'COMPONENT_SET') {
     const set = node.parent
-    return { entityId: set.id, entityKind: 'componentSet', name: set.name }
+    return { entityId: set.id, entityKind: 'componentSet', name: set.name, variantId: node.id }
   }
   return {
     entityId: node.id,

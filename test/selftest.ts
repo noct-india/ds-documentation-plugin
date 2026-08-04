@@ -23,7 +23,7 @@ import {
 } from '../src/main/storage'
 import { buildTree, flattenLeaves, folderAt, renderTreeOutline } from '../src/shared/tree'
 import { componentDir, slug, uniqueSlugger } from '../src/shared/slug'
-import { isDocumented, renderEntityDoc } from '../src/main/export/render'
+import { isDocumented, renderAuthoredSections, renderEntityDoc } from '../src/main/export/render'
 import { classify, classifySegments, splitIntoSentences } from '../src/shared/classify'
 import { cssColor, cssEffects, cssPaints, fontWeight } from '../src/main/reader/paint'
 import type { EntityKind, NoteEntry, SectionKey } from '../src/shared/types'
@@ -1049,6 +1049,56 @@ section('drafts: arriving alongside existing notes changes nothing')
   check('the existing note is byte-identical', JSON.stringify(after.slice(0, 1)) === before)
   check('the draft is appended after it', after[1].draft === true)
   check('both live in the same category without merging', after.length === 2)
+}
+
+section('variants: a variant is documented as itself, not as its set')
+
+{
+  // A variant inherits the set's purpose, so it offers a narrower set of
+  // categories. `pairs` in particular belongs to the component, not to one of
+  // its states — documenting what Button sits beside, once per variant, would
+  // be noise repeated 176 times.
+  const forVariant = sectionsFor('variant')
+  const forSet = sectionsFor('componentSet')
+
+  check('a variant has its own category set', forVariant.length > 0)
+  check('it drops "pairs"', forVariant.indexOf('pairs' as SectionKey) === -1)
+  check('the set keeps "pairs"', forSet.indexOf('pairs' as SectionKey) !== -1)
+  check(
+    'everything a variant offers is also offered by its set',
+    forVariant.every((key) => forSet.indexOf(key) !== -1)
+  )
+  check('every variant category has a heading', forVariant.every((key) => Boolean(SECTION_HEADINGS[key])))
+  check('every variant category has a label', forVariant.every((key) => Boolean(SECTION_LABELS[key])))
+  check('every variant category has a prompt', forVariant.every((key) => Boolean(SECTION_PROMPTS[key])))
+}
+
+{
+  const host = new FakeHost()
+  appendNote(host, 'variant', 'Size=36, Type=Primary', 'Never use below 32px.', 'rules', 'Anusha')
+
+  const log = readLog(host)
+  check('a variant note stores against the variant kind', log.length === 1)
+
+  // Level 4, so it nests under "### Size=36, Type=Primary" inside the
+  // component's own file rather than competing with the component's headings.
+  const nested = renderAuthoredSections(log, 'variant', 4)
+  check('it renders at heading level 4', nested.indexOf('#### ') !== -1)
+  check('it does not open a level-2 heading', nested.indexOf('\n## ') === -1)
+  check('the wording is carried through verbatim', nested.indexOf('Never use below 32px.') !== -1)
+
+  // A draft is a suggestion nobody has accepted. It must not reach the export
+  // by riding along inside a variant block.
+  const drafted = new FakeHost()
+  appendDrafts(drafted, 'variant', 'Size=36', [{ text: 'A guess.', section: 'rules' }], 'Claude')
+  check(
+    'an undecided suggestion renders nothing for the export',
+    renderAuthoredSections(
+      readLog(drafted).filter((e) => !e.draft),
+      'variant',
+      4
+    ).trim() === ''
+  )
 }
 
 // ─── Result ──────────────────────────────────────────────────────────────────

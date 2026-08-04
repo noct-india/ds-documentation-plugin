@@ -1,4 +1,11 @@
-# Design System Documentation — Figma plugin
+# Design System Documentation (v2) — Figma plugin
+
+> **This is v2.** It carries a component viewer and per-variant notes; v1 lives on
+> untouched in `DS documentation plugin/`. The two have **different manifest ids**, so
+> Figma keeps their notes in separate stores — v2 cannot read or damage anything v1
+> wrote, and starts empty. If v2 becomes the version to keep, changing its manifest `id`
+> back to `ds-documentation-plugin-noct` reconnects this code to v1's notes.
+
 
 Attach written documentation to every element of a Figma design system, and export it
 as a ZIP of markdown shaped for **Figma Make's `guidelines/` folder**.
@@ -109,6 +116,45 @@ agent knows the difference between *no rule* and *no constraint*.
 Property keys for BOOLEAN/TEXT/INSTANCE_SWAP carry a `#0:0` suffix that disambiguates
 two properties sharing a display name. The full key is stored; only the clean prefix
 is displayed.
+
+### Seeing the component — the viewer
+
+A property table tells you a component has a `State` axis. It does not tell you what
+`Hover` looks like. So a component opens with a picture and a set of controls built from
+its own property definitions — Figma exposes no way to embed its properties panel, so
+this draws one.
+
+**Variant properties cost nothing.** Picking `Size=36` selects a different *node*, so it
+is a straight export with the document untouched.
+
+**Booleans and text do not, and that is why they need an instance.** They are overrides,
+and the variant node renders with its defaults baked in — toggling `Icon` on a static
+export would leave the picture unchanged, which is worse than not offering the control.
+So the sandbox builds a throwaway instance, applies the properties, exports, and removes
+it in a `finally`. That last part is not optional: an instance stranded on a design
+system page would be a real mess for whoever opens the file next. It is also the only
+part of this plugin that writes to the document rather than reading it, so it runs only
+when a non-variant property is actually moved off its default.
+
+Only what is on screen is ever rasterised, and results are cached for the session, so a
+176-variant set costs one image rather than 176.
+
+### Notes about one variant
+
+Some rules belong to a combination, not a component: *the 28px size drops its label*.
+Those can be written against the variant itself, which is a real Figma node and stores
+plugin data like any other.
+
+**The set is always the default.** A radio pair under the viewer names both options, and
+choosing the variant is a deliberate click — the picker never silently redirects where a
+note lands. Moving a dropdown while the variant is selected follows the picker, and the
+label changes with it, so the target and the picture cannot disagree.
+
+Variant notes do **not** get files of their own. The grouping rule stands — individual
+components get individual files — so they export as `### <combination>` blocks under a
+`## Specific variants` heading inside the component's own `.md`. Finding which variants
+carry notes goes through the root index rather than reading plugin data off every child,
+which is the difference between a few lookups and several thousand.
 
 ### Layout
 

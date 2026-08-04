@@ -24,6 +24,7 @@ const LABELS: Record<EntityKind, string> = {
   effectStyle: 'effect styles',
   component: 'components',
   componentSet: 'components',
+  variant: 'variants',
   project: 'items',
 }
 

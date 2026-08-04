@@ -6,8 +6,13 @@
 // large files. So pages list instantly and a page's contents load only when
 // opened. The one full sweep happens on export, where a pause is expected.
 
-import type { ComponentProperty, EntityStructure, ListItem } from '../../shared/types'
-import { liveNoteCount, readLog } from '../storage'
+import type {
+  ComponentProperty,
+  EntityStructure,
+  ListItem,
+  VariantRef,
+} from '../../shared/types'
+import { liveNoteCount, readIndex, readLog } from '../storage'
 
 /** Components sitting directly on a page rather than inside a section. */
 export const UNGROUPED_ID = '__ungrouped__'
@@ -149,14 +154,29 @@ export async function listComponents(pageId: string, sectionId: string): Promise
   const section = contents?.sections.find((s) => s.id === sectionId)
   if (!section) return []
 
+  // Read once for the whole list. Checking each variant's plugin data directly
+  // would mean thousands of reads to answer a question about a subtitle.
+  const index = readIndex()
+
   return section.components
     .map((component) => {
-      const variants =
-        component.type === 'COMPONENT_SET' ? `${component.children.length} variants` : 'single'
+      const parts: string[] = []
+      if (component.type === 'COMPONENT_SET') {
+        parts.push(`${component.children.length} variants`)
+        // Notes written about single combinations. Worth surfacing, or they are
+        // only discoverable by stepping through the picker one variant at a time.
+        const documented = component.children.filter(
+          (child) => (index[child.id]?.noteCount ?? 0) > 0
+        ).length
+        if (documented > 0) parts.push(`${documented} documented`)
+      } else {
+        parts.push('single')
+      }
+
       return {
         id: component.id,
         name: component.name,
-        detail: variants,
+        detail: parts.join(' · '),
         noteCount: liveNoteCount(readLog(component)),
         entityKind:
           component.type === 'COMPONENT_SET' ? ('componentSet' as const) : ('component' as const),
@@ -231,6 +251,41 @@ async function readNestedComponents(node: DocumentableComponent): Promise<string
   return [...names].sort()
 }
 
+/**
+ * Every variant, with the combination it stands for.
+ *
+ * Reading `variantProperties` off each child is cheap — no exports, no async —
+ * so even a 176-variant set costs almost nothing. `variantProperties` carries a
+ * deprecation marker in the typings, but its replacement is an *instance* API
+ * that does not apply to a variant sitting inside a set. The node's own name
+ * ("Size=36, Type=Primary") is the fallback if it is ever withdrawn.
+ */
+function readVariants(node: DocumentableComponent): VariantRef[] | undefined {
+  if (node.type !== 'COMPONENT_SET') return undefined
+
+  const variants: VariantRef[] = []
+  for (const child of node.children) {
+    if (child.type !== 'COMPONENT') continue
+    variants.push({
+      id: child.id,
+      name: child.name,
+      properties: child.variantProperties ?? parseVariantName(child.name),
+    })
+  }
+  return variants.length > 0 ? variants : undefined
+}
+
+/** "Size=36, Type=Primary" → { Size: "36", Type: "Primary" }. */
+function parseVariantName(name: string): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const part of name.split(',')) {
+    const at = part.indexOf('=')
+    if (at === -1) continue
+    out[part.slice(0, at).trim()] = part.slice(at + 1).trim()
+  }
+  return out
+}
+
 export async function componentStructure(
   node: DocumentableComponent
 ): Promise<EntityStructure> {
@@ -242,6 +297,7 @@ export async function componentStructure(
     description: node.description || undefined,
     properties,
     variantCount: node.type === 'COMPONENT_SET' ? node.children.length : 1,
+    variants: readVariants(node),
     nestedComponents: nested.length > 0 ? nested : undefined,
     parentName: node.parent?.type === 'SECTION' ? node.parent.name : undefined,
   }

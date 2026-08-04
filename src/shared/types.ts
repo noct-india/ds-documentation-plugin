@@ -10,6 +10,7 @@ export type EntityKind =
   | 'effectStyle'
   | 'component'
   | 'componentSet'
+  | 'variant' // one combination inside a set — documented only on purpose
   | 'folder' // a "/" group inside a collection or style set
   | 'page'
   | 'section'
@@ -133,6 +134,10 @@ const SECTION_SETS: Record<EntityKind, SectionKey[]> = {
     'donts',
     'notes',
   ],
+  // A variant inherits the set's purpose, so what is worth saying here is what
+  // makes *this combination* different. `pairs` is dropped: what a component
+  // sits next to is a property of the component, not of one of its states.
+  variant: ['purpose', 'usage', 'instead', 'states', 'content', 'rules', 'donts', 'notes'],
   folder: ['purpose', 'usage', 'naming', 'rules', 'donts', 'notes'],
   page: ['purpose', 'usage', 'rules', 'donts', 'notes'],
   section: ['purpose', 'usage', 'rules', 'donts', 'notes'],
@@ -258,6 +263,16 @@ export interface VariableModeValue {
   value: string
 }
 
+/** One variant inside a component set. */
+export interface VariantRef {
+  /** Node id — what gets rasterised, and what per-variant notes are stored on. */
+  id: string
+  /** Figma's own label, e.g. "Size=36, Type=Primary". */
+  name: string
+  /** The combination itself, for matching a picker selection to a node. */
+  properties: Record<string, string>
+}
+
 export interface ComponentProperty {
   /** Full key including any "#0:0" suffix — this is the identity. */
   key: string
@@ -285,6 +300,13 @@ export interface EntityStructure {
   /** Components: variant + property table. */
   properties?: ComponentProperty[]
   variantCount?: number
+  /**
+   * Component sets: every variant and the combination it stands for.
+   *
+   * Ids and property maps only — no images. The viewer rasterises whichever one
+   * is on screen, so a 176-variant set costs one export rather than 176.
+   */
+  variants?: VariantRef[]
   nestedComponents?: string[]
   /** Collections: number of variables inside. */
   childCount?: number
@@ -347,6 +369,14 @@ export interface SelectionTarget {
   entityId: string
   entityKind: EntityKind
   name: string
+  /**
+   * Set when a variant was selected on canvas rather than the whole set.
+   *
+   * The viewer opens on this combination, but the note target stays the set —
+   * selecting something on canvas is not the same as saying you want to write
+   * about only that one variant.
+   */
+  variantId?: string
 }
 
 /** One recipient of a batch note. */
@@ -524,6 +554,20 @@ export type Request =
   // has stopped — which is exactly when someone needs to be told how to start it.
   | { type: 'rememberBridgeHome'; path: string }
   | { type: 'getBridgeHome' }
+  | {
+      /**
+       * A picture of one component or variant.
+       *
+       * `overrides` are component properties to apply first. Without them the
+       * node is exported as it stands and the document is never touched; with
+       * them a throwaway instance is needed, which is the only way a boolean
+       * can actually reveal the layer it controls.
+       */
+      type: 'getComponentImage'
+      nodeId: string
+      overrides?: Record<string, string | boolean>
+      maxPx?: number
+    }
 
 export interface ResponseMap {
   getHome: HomeState
@@ -556,6 +600,7 @@ export interface ResponseMap {
   resize: null
   rememberBridgeHome: null
   getBridgeHome: string | null
+  getComponentImage: { png: string; width: number; height: number } | null
 }
 
 /** UI → sandbox. */

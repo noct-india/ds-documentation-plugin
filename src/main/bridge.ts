@@ -10,39 +10,26 @@ import { migrateSection } from '../shared/types'
 import { ancestorPaths, folderId, folderName } from '../shared/folder'
 import { readBrief, readLog } from './storage'
 import { resolveEntity } from './reader/entity'
+import { BRIDGE_MAX_PX, renderNode } from './reader/preview'
 import { getCollections, variablesIn } from './reader/variables'
 import { getStyles } from './reader/styles'
 import { allComponents } from './reader/components'
-
-/** Cap on the PNG sent per component — enough to read a control, not a screenshot. */
-const IMAGE_MAX_PX = 320
 
 /**
  * A picture of the component.
  *
  * For anything visual this is worth more than its property table: it shows
  * density, shape, weight and hierarchy, none of which are inferable from names.
- * Only the first variant of a set is exported — 176 near-identical images would
- * cost a great deal and say almost nothing extra.
+ * Only one variant of a set is exported — 176 near-identical images would cost
+ * a great deal and say almost nothing extra.
+ *
+ * Rasterising lives in `reader/preview`, shared with the component viewer, so
+ * the two cannot drift and a preview the designer has already looked at is
+ * already in the cache.
  */
 async function exportImage(node: ComponentNode | ComponentSetNode): Promise<string | undefined> {
-  const target = node.type === 'COMPONENT_SET' ? (node.children[0] ?? node) : node
-  if (!('exportAsync' in target)) return undefined
-
-  const width = 'width' in target ? target.width : IMAGE_MAX_PX
-  const scale = width > 0 ? Math.min(2, IMAGE_MAX_PX / width) : 1
-
-  try {
-    const bytes = await target.exportAsync({
-      format: 'PNG',
-      constraint: { type: 'SCALE', value: Math.max(0.25, scale) },
-    })
-    return figma.base64Encode(bytes)
-  } catch (err) {
-    // A component that cannot be rasterised should not sink the whole request.
-    console.error('[dsdoc] could not export image', err)
-    return undefined
-  }
+  const image = await renderNode(node.id, { maxPx: BRIDGE_MAX_PX })
+  return image?.png
 }
 
 function notesOf(host: { getPluginData(key: string): string }): BridgeItem['existingNotes'] {
@@ -134,13 +121,17 @@ async function ancestryOf(
     }
   }
 
-  if (kind === 'component' || kind === 'componentSet') {
+  if (kind === 'component' || kind === 'componentSet' || kind === 'variant') {
     // A component's containers are real nodes: the section it sits in, and the
     // page that holds it. Both can carry rules that apply to everything inside.
+    // A variant adds one more level below those — its own set, whose rules
+    // govern every combination in it.
     const node = await figma.getNodeByIdAsync(entityId)
     const chainUp: Array<{ name: string; kind: string; host: BaseNode }> = []
     let cursor: BaseNode | null = node?.parent ?? null
     while (cursor) {
+      if (cursor.type === 'COMPONENT_SET')
+        chainUp.push({ name: cursor.name, kind: 'component set', host: cursor })
       if (cursor.type === 'SECTION') chainUp.push({ name: cursor.name, kind: 'section', host: cursor })
       if (cursor.type === 'PAGE') {
         chainUp.push({ name: cursor.name, kind: 'page', host: cursor })

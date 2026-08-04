@@ -10,7 +10,7 @@
 
 import type { ExportFile, NoteEntry } from '../../shared/types'
 import { componentDir, uniqueSlugger } from '../../shared/slug'
-import { liveNoteCount, readLog } from '../storage'
+import { liveNoteCount, readIndex, readLog } from '../storage'
 import { allComponents, componentStructure, UNGROUPED_NAME } from '../reader/components'
 import { getStyles, styleStructure, styleStructureTree, type StyleKind } from '../reader/styles'
 import { collectionStructure, getCollections, variablesIn, variableStructure } from '../reader/variables'
@@ -38,6 +38,37 @@ function renderForExport(
   }
   const structureMd = renderStructure(name, kind, structure, level)
   return `${structureMd}\n\n${override.trim()}\n`
+}
+
+/**
+ * Notes written about single variants, appended to their component's file.
+ *
+ * The root index is consulted rather than reading plugin data off every child:
+ * a file with fifty 176-variant sets would otherwise mean nine thousand reads
+ * to find the handful of variants anyone actually annotated.
+ *
+ * Returns "" for the overwhelmingly common case of a set nobody documented at
+ * variant level, so ordinary component files are untouched.
+ */
+function renderVariantNotes(component: ComponentNode | ComponentSetNode): string {
+  if (component.type !== 'COMPONENT_SET') return ''
+
+  const index = readIndex()
+  const documented = component.children.filter(
+    (child) => child.type === 'COMPONENT' && (index[child.id]?.noteCount ?? 0) > 0
+  )
+  if (documented.length === 0) return ''
+
+  const blocks: string[] = ['\n## Specific variants\n']
+  for (const variant of documented) {
+    const log = readLog(variant as ComponentNode)
+    const body = renderAuthoredSections(log, 'variant', 4)
+    if (!body.trim()) continue
+    blocks.push(`### ${variant.name}\n\n${body.trim()}\n`)
+  }
+
+  // Every candidate could still render empty — drafts do not export.
+  return blocks.length > 1 ? blocks.join('\n') : ''
 }
 
 type Progress = (message: string) => void
@@ -190,7 +221,10 @@ export async function buildExport(progress: Progress): Promise<ExportFile[]> {
       await componentStructure(component),
       log
     )
-    files.push({ path: `guidelines/${file}`, content })
+    // Variants do not get files of their own — individual components do, and a
+    // variant is a state of one, not another component. Anything documented
+    // about a single combination lands inside its component's file.
+    files.push({ path: `guidelines/${file}`, content: content + renderVariantNotes(component) })
     manifest.components.push({
       name: component.name,
       file,

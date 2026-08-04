@@ -50,7 +50,14 @@ interface NavRoute {
 
 /** What the right pane is showing. */
 type Selection =
-  | { kind: 'entity'; entityId: string; entityKind: EntityKind; name: string }
+  | {
+      kind: 'entity'
+      entityId: string
+      entityKind: EntityKind
+      name: string
+      /** Set when a variant was picked on canvas — opens the viewer on it. */
+      variantId?: string
+    }
   | { kind: 'batch'; targets: BatchTarget[] }
   /** The project brief, reachable from the nav rather than only on first open. */
   | { kind: 'about' }
@@ -78,6 +85,7 @@ const KIND_LABELS: Record<EntityKind, string> = {
   effectStyle: 'Effect style',
   component: 'Component',
   componentSet: 'Component set',
+  variant: 'Variant',
   project: 'Project',
 }
 
@@ -118,8 +126,8 @@ export function App() {
   }, [])
 
   const selectEntity = useCallback(
-    (entityId: string, entityKind: EntityKind, name: string) =>
-      setSelection({ kind: 'entity', entityId, entityKind, name }),
+    (entityId: string, entityKind: EntityKind, name: string, variantId?: string) =>
+      setSelection({ kind: 'entity', entityId, entityKind, name, variantId }),
     []
   )
 
@@ -137,7 +145,12 @@ export function App() {
     call({ type: 'getSelectionBatch' })
       .then((targets) => {
         if (targets.length === 1) {
-          selectEntity(targets[0].entityId, targets[0].entityKind, targets[0].name)
+          selectEntity(
+            targets[0].entityId,
+            targets[0].entityKind,
+            targets[0].name,
+            targets[0].variantId
+          )
         } else if (targets.length > 1) {
           setSelection({ kind: 'batch', targets })
         }
@@ -556,6 +569,8 @@ export function App() {
                 key={selection.entityId}
                 entityId={selection.entityId}
                 entityKind={selection.entityKind}
+                name={selection.name}
+                initialVariantId={selection.variantId}
                 onSaved={() => setRefreshToken((n) => n + 1)}
                 onError={(message) => notify(message, true)}
                 onPolish={(notes) => sendPolish(notes, { brief: home?.brief })}

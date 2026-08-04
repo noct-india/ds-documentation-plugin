@@ -10,6 +10,7 @@ import type { PolishState } from '../bridge'
 import { SECTION_LABELS, migrateSection, sectionsFor } from '../../shared/types'
 import { call } from '../rpc'
 import { Composer, type ComposerEntry, type SendMode } from '../Composer'
+import { ComponentViewer, type WriteTarget } from '../ComponentViewer'
 import { Drafts } from '../Drafts'
 import { Swatch } from '../Swatch'
 import { Target } from '../icons'
@@ -17,6 +18,10 @@ import { Target } from '../icons'
 interface Props {
   entityId: string
   entityKind: EntityKind
+  /** Name of the opened entity, used as the default write target's label. */
+  name: string
+  /** Variant selected on canvas, if any — opens the viewer on that combination. */
+  initialVariantId?: string
   onSaved: () => void
   onError: (message: string) => void
   /** Hands freshly saved notes to the bridge for tidying, if one is running. */
@@ -32,9 +37,16 @@ interface Props {
   onDismissAnswer: () => void
 }
 
+/** The opened entity, as the target notes go to until someone says otherwise. */
+function asTarget(entityId: string, entityKind: EntityKind, name: string): WriteTarget {
+  return { entityId, entityKind, name }
+}
+
 export function Detail({
   entityId,
   entityKind,
+  name,
+  initialVariantId,
   onSaved,
   onError,
   onPolish,
@@ -52,14 +64,40 @@ export function Detail({
   const [editingNote, setEditingNote] = useState<{ id: string; text: string } | null>(null)
   const docRef = useRef<HTMLDivElement>(null)
 
+  /**
+   * What a note gets written to. Starts as whatever was opened and only ever
+   * moves because someone clicked the target control — everything below writes
+   * here rather than to the opened entity.
+   */
+  const [target, setTarget] = useState<WriteTarget>(asTarget(entityId, entityKind, name))
+
+  /**
+   * The opened component, kept for the viewer's property table.
+   *
+   * When the target moves to a variant, `detail` follows it and no longer
+   * carries the set's variants — but the picker still has to be drawn.
+   */
+  const [shell, setShell] = useState<EntityDetail | null>(null)
+
+  // A new entity is a fresh start: the target must never survive navigation, or
+  // the next component would open still pointed at the last one's variant.
+  useEffect(() => {
+    setTarget(asTarget(entityId, entityKind, name))
+    setShell(null)
+  }, [entityId, entityKind])
+
   useEffect(() => {
     let cancelled = false
     setDetail(null)
     setRefiling(null)
     setEditing(null)
-    call({ type: 'getEntity', entityId, entityKind })
+    call({ type: 'getEntity', entityId: target.entityId, entityKind: target.entityKind })
       .then((d) => {
-        if (!cancelled) setDetail(d)
+        if (cancelled) return
+        setDetail(d)
+        // Same fetch serves both while the target is still the opened entity,
+        // which it always is on first load — so the viewer costs no extra call.
+        if (d.entityId === entityId) setShell(d)
       })
       .catch((err: Error) => {
         if (!cancelled) onError(err.message)
@@ -67,7 +105,11 @@ export function Detail({
     return () => {
       cancelled = true
     }
-  }, [entityId, entityKind])
+  }, [target.entityId, target.entityKind])
+
+  // Every write goes to the target, never to the opened entity. One place to
+  // read, so a new call site cannot quietly write to the wrong thing.
+  const writeTo = { entityId: target.entityId, entityKind: target.entityKind }
 
   const submit = async (entries: ComposerEntry[], mode: SendMode) => {
     // A question is not a note — it never touches storage.
@@ -77,7 +119,7 @@ export function Detail({
     }
 
     try {
-      const updated = await call({ type: 'addNotes', entityId, entityKind, entries })
+      const updated = await call({ type: 'addNotes', ...writeTo, entries })
       setDetail(updated)
       requestAnimationFrame(() => docRef.current?.scrollIntoView({ block: 'end' }))
       onSaved()
@@ -92,7 +134,7 @@ export function Detail({
             text: e.text,
             section: e.section,
             subject: updated.name,
-            kind: entityKind,
+            kind: target.entityKind,
           }))
         )
       }
@@ -107,7 +149,7 @@ export function Detail({
     setEditingNote(null)
     if (!text) return
     try {
-      setDetail(await call({ type: 'editNote', entityId, entityKind, noteId: editingNote.id, text }))
+      setDetail(await call({ type: 'editNote', ...writeTo, noteId: editingNote.id, text }))
       onSaved()
     } catch (err) {
       onError((err as Error).message)
@@ -117,7 +159,7 @@ export function Detail({
   const review = async (noteIds: string[] | null, action: 'approve' | 'reject') => {
     setSaving(true)
     try {
-      setDetail(await call({ type: 'reviewDrafts', entityId, entityKind, noteIds, action }))
+      setDetail(await call({ type: 'reviewDrafts', ...writeTo, noteIds, action }))
       onSaved()
     } catch (err) {
       onError((err as Error).message)
@@ -129,7 +171,7 @@ export function Detail({
   /** Editing a suggestion rewrites it in place; it stays a draft until approved. */
   const editDraft = async (noteId: string, text: string) => {
     try {
-      setDetail(await call({ type: 'editNote', entityId, entityKind, noteId, text }))
+      setDetail(await call({ type: 'editNote', ...writeTo, noteId, text }))
     } catch (err) {
       onError((err as Error).message)
     }
@@ -137,7 +179,7 @@ export function Detail({
 
   const remove = async (noteId: string) => {
     try {
-      setDetail(await call({ type: 'deleteNote', entityId, entityKind, noteId }))
+      setDetail(await call({ type: 'deleteNote', ...writeTo, noteId }))
       onSaved()
     } catch (err) {
       onError((err as Error).message)
@@ -148,7 +190,7 @@ export function Detail({
     if (editing === null || saving) return
     setSaving(true)
     try {
-      setDetail(await call({ type: 'saveBody', entityId, entityKind, body: editing }))
+      setDetail(await call({ type: 'saveBody', ...writeTo, body: editing }))
       setEditing(null)
       onSaved()
     } catch (err) {
@@ -161,7 +203,7 @@ export function Detail({
   const resetBody = async () => {
     setSaving(true)
     try {
-      setDetail(await call({ type: 'resetBody', entityId, entityKind }))
+      setDetail(await call({ type: 'resetBody', ...writeTo }))
       setEditing(null)
       onSaved()
     } catch (err) {
@@ -174,7 +216,7 @@ export function Detail({
   const refile = async (noteId: string, section: SectionKey) => {
     setRefiling(null)
     try {
-      setDetail(await call({ type: 'recategorizeNote', entityId, entityKind, noteId, section }))
+      setDetail(await call({ type: 'recategorizeNote', ...writeTo, noteId, section }))
       onSaved()
     } catch (err) {
       onError((err as Error).message)
@@ -199,20 +241,38 @@ export function Detail({
   const mismatch =
     detail.log.length > 0 &&
     detail.storedAs !== undefined &&
-    detail.storedAs.kind !== entityKind
+    detail.storedAs.kind !== target.entityKind
 
-  const canReveal = entityKind === 'component' || entityKind === 'componentSet'
+  const canReveal =
+    target.entityKind === 'component' ||
+    target.entityKind === 'componentSet' ||
+    target.entityKind === 'variant'
   const liveEntries = detail.log.filter((e) => !e.deleted)
   const filled = new Set(liveEntries.map((e) => migrateSection(e.section)))
-  const sections = sectionsFor(entityKind)
+  const sections = sectionsFor(target.entityKind)
+
+  // Only a set has combinations worth stepping through. A lone component still
+  // gets a picture, which is the greater part of the value.
+  const showViewer =
+    shell !== null && (entityKind === 'component' || entityKind === 'componentSet')
 
   return (
     <>
       <div className="body">
+        {showViewer && editing === null && (
+          <ComponentViewer
+            entityId={entityId}
+            name={name}
+            structure={shell!.structure}
+            initialVariantId={initialVariantId}
+            target={target}
+            onTargetChange={setTarget}
+          />
+        )}
         {editing === null && (
           <Drafts
             drafts={detail.log.filter((e) => e.draft && !e.deleted)}
-            entityKind={entityKind}
+            entityKind={target.entityKind}
             busy={saving}
             onApprove={(ids) => review(ids, 'approve')}
             onReject={(ids) => review(ids, 'reject')}
@@ -407,15 +467,20 @@ export function Detail({
       )}
 
       <Composer
-        entityKind={entityKind}
+        entityKind={target.entityKind}
         bridgeReady={bridgeReady}
         filled={filled}
         onSubmit={submit}
+        // Says what it will write to. Only when that is not the thing you
+        // opened — otherwise it is stating the obvious in every other screen.
+        placeholder={
+          target.entityKind === 'variant' ? `Note about ${target.name} only…` : undefined
+        }
         trailing={
           canReveal ? (
             <button
               className="chip"
-              onClick={() => call({ type: 'revealEntity', entityId, entityKind })}
+              onClick={() => call({ type: 'revealEntity', ...writeTo })}
               title="Select this component on the canvas"
               style={{ marginLeft: 'auto' }}
             >

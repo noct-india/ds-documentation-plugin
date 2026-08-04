@@ -1,6 +1,6 @@
 {
-  "name": "Design System Documentation",
-  "id": "ds-documentation-plugin-noct",
+  "name": "Design System Documentation (v2)",
+  "id": "ds-documentation-plugin-noct-v2",
   "api": "1.0.0",
   "main": "dist/code.js",
   "ui": "dist/ui.html",

@@ -42,6 +42,7 @@ import {
   writeDoc,
 } from './storage'
 import { entityExists, resolveEntity } from './reader/entity'
+import { invalidatePreviewCache, renderNode } from './reader/preview'
 import { listCollections, getCollectionTree, invalidateVariableCache } from './reader/variables'
 import { getStyleTree, invalidateStyleCache } from './reader/styles'
 import {
@@ -554,7 +555,14 @@ async function handle(request: Request): Promise<unknown> {
     }
 
     case 'revealEntity': {
-      if (request.entityKind === 'component' || request.entityKind === 'componentSet') {
+      // Variants included — selecting the exact combination you are writing
+      // about is more useful than selecting the whole set, and the button is
+      // offered for them, so it has to do something.
+      if (
+        request.entityKind === 'component' ||
+        request.entityKind === 'componentSet' ||
+        request.entityKind === 'variant'
+      ) {
         await revealNode(request.entityId)
       }
       return null
@@ -566,6 +574,7 @@ async function handle(request: Request): Promise<unknown> {
       invalidateVariableCache()
       invalidateStyleCache()
       invalidateComponentCache()
+      invalidatePreviewCache()
       const files = await buildExport(progress)
       return { fileName: figma.root.name, files }
     }
@@ -586,6 +595,12 @@ async function handle(request: Request): Promise<unknown> {
       const stored = await figma.clientStorage.getAsync(BRIDGE_HOME_KEY)
       return typeof stored === 'string' ? stored : null
     }
+
+    case 'getComponentImage':
+      return renderNode(request.nodeId, {
+        maxPx: request.maxPx,
+        overrides: request.overrides,
+      })
 
     default: {
       const exhaustive: never = request
