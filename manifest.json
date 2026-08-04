@@ -1,0 +1,15 @@
+{
+  "name": "Design System Documentation",
+  "id": "ds-documentation-plugin-noct",
+  "api": "1.0.0",
+  "main": "dist/code.js",
+  "ui": "dist/ui.html",
+  "editorType": ["figma"],
+  "documentAccess": "dynamic-page",
+  "permissions": ["currentuser"],
+  "networkAccess": {
+    "allowedDomains": ["ws://localhost:8473"],
+    "devAllowedDomains": ["ws://localhost:8473"],
+    "reasoning": "Connects to a documentation bridge running on the designer's own machine, so Claude can suggest design system notes. No data leaves the local machine via this plugin."
+  }
+}

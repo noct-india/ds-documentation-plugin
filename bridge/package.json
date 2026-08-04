@@ -1,0 +1,18 @@
+{
+  "name": "ds-documentation-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Bridges the Design System Documentation Figma plugin to Claude over MCP",
+  "bin": {
+    "ds-documentation-bridge": "./server.mjs"
+  },
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "ws": "^8.18.0",
+    "zod": "^3.24.0"
+  }
+}

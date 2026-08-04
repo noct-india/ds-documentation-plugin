@@ -1,0 +1,31 @@
+{
+  "name": "ds-documentation-plugin",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Figma plugin \u2014 attach documentation to every design system element, export as Figma Make guidelines",
+  "scripts": {
+    "build": "node build.mjs",
+    "dev": "node build.mjs --watch",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p test",
+    "test": "esbuild test/selftest.ts --bundle --platform=node --format=esm --outfile=dist/selftest.mjs && node dist/selftest.mjs",
+    "sample": "esbuild test/sample.ts --bundle --platform=node --format=esm --outfile=dist/sample.mjs && node dist/sample.mjs",
+    "classify": "esbuild test/classify.ts --bundle --platform=node --format=esm --outfile=dist/classify.mjs && node dist/classify.mjs",
+    "check": "npm run typecheck && npm test && npm run build",
+    "test:bridge": "node bridge/e2e.mjs",
+    "package": "node package.mjs",
+    "test:refs": "node bridge/refcheck.mjs"
+  },
+  "devDependencies": {
+    "@figma/plugin-typings": "^1.108.0",
+    "@types/node": "^22.20.1",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.7.0"
+  },
+  "dependencies": {
+    "jszip": "^3.10.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  }
+}

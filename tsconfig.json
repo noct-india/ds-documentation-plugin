@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "lib": ["ES2020", "DOM"],
+    "jsx": "react-jsx",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "noEmit": true,
+    // Deliberately no "node" types: the sandbox half runs in Figma's JS
+    // sandbox and the UI half in an iframe. Neither has Node available, so
+    // reaching for `fs` or `Buffer` should be a compile error, not a runtime
+    // surprise. Tests opt in via test/tsconfig.json.
+    "types": ["@figma/plugin-typings"]
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx"]
+}

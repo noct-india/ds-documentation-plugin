@@ -1,0 +1,1425 @@
+:root {
+  --bg: #1a1a1a;
+  --bg-raised: #232323;
+  --bg-sunken: #0f0f0f;
+  --border: #333333;
+  --border-strong: #4a4a4a;
+  --text: #f2f2f2;
+  --text-dim: #9a9a9a;
+  --text-faint: #6a6a6a;
+  --accent: #7cc4ff;
+  --warn: #ffb454;
+  --danger: #ff6b6b;
+  --radius: 6px;
+  --mono: ui-monospace, 'SF Mono', 'Menlo', 'Consolas', monospace;
+  --sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 12px;
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+/* ─── Shell ──────────────────────────────────────────────────────────────── */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ─── Two panes ──────────────────────────────────────────────────────────── */
+
+.panes {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.pane-nav {
+  flex: 0 0 288px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--border);
+}
+
+.pane-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.pane-detail {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  /* Without this the markdown pane's long lines stretch the pane instead of
+     wrapping, and the sidebar gets squeezed off screen. */
+  min-width: 0;
+  min-height: 0;
+}
+
+.detail-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 12px 10px;
+  border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+
+/* What kind of thing the note will be written to. */
+.detail-kind {
+  flex: 0 0 auto;
+  font-size: 10px;
+  color: var(--text-faint);
+  border: 1px solid var(--border-strong);
+  border-radius: 99px;
+  padding: 2px 8px;
+}
+
+.detail-head strong {
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jump {
+  flex: 0 0 auto;
+  width: 100%;
+  text-align: left;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-raised);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.jump:hover {
+  color: var(--text);
+}
+
+/* Drag handle for the plugin window — two panes want more room than the
+   default panel, and how much depends on the screen. */
+.grip {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  width: 16px;
+  height: 16px;
+  cursor: nwse-resize;
+  z-index: 20;
+  background: linear-gradient(
+    -45deg,
+    transparent 0 40%,
+    var(--border-strong) 40% 50%,
+    transparent 50% 65%,
+    var(--border-strong) 65% 75%,
+    transparent 75%
+  );
+}
+
+/* ─── Overview ───────────────────────────────────────────────────────────── */
+
+.overview {
+  overflow-y: auto;
+  padding-bottom: 16px;
+}
+
+.overview-head {
+  padding: 20px 16px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.overview-file {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.overview-coverage {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 5px;
+}
+
+.overview-help {
+  padding: 4px 16px;
+  font-size: 11px;
+  line-height: 1.65;
+  color: var(--text-dim);
+  max-width: 60ch;
+}
+
+.overview-help code {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
+  min-height: 44px;
+}
+
+.back {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius);
+  color: var(--text-dim);
+  flex: 0 0 auto;
+}
+
+.back:hover {
+  background: var(--bg-raised);
+  color: var(--text);
+}
+
+.crumbs {
+  font-size: 11px;
+  color: var(--text-dim);
+  line-height: 1.4;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.crumb {
+  padding: 0;
+  font-size: 11px;
+  color: var(--text-dim);
+  text-align: left;
+}
+
+.crumb:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.crumb-sep {
+  color: var(--text-faint);
+  margin: 0 4px;
+}
+
+.crumbs strong {
+  display: block;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* ─── Rows ───────────────────────────────────────────────────────────────── */
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+
+.row:hover {
+  background: var(--bg-raised);
+}
+
+/* The row whose notes the right pane is showing. */
+.row.active {
+  background: var(--bg-raised);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.row.active .row-name {
+  color: var(--accent);
+}
+
+.row-icon {
+  flex: 0 0 auto;
+  width: 16px;
+  color: var(--text-faint);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.row-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* These are spans, so they need to be told to stack — otherwise the detail
+   runs straight into the name ("VariablesLoading…"). */
+.row-name,
+.row-detail {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row-name {
+  font-size: 12px;
+}
+
+.row-detail {
+  font-size: 10px;
+  color: var(--text-faint);
+  margin-top: 2px;
+}
+
+.row-chevron {
+  flex: 0 0 auto;
+  color: var(--text-faint);
+}
+
+/* ─── Swatches ───────────────────────────────────────────────────────────── */
+
+.swatch {
+  display: flex;
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  overflow: hidden;
+  /* Checkerboard shows through anything semi-transparent, the way Figma's
+     own swatches do — otherwise a 10% fill looks identical to a solid one. */
+  background-image: linear-gradient(45deg, #4a4a4a 25%, transparent 25%),
+    linear-gradient(-45deg, #4a4a4a 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #4a4a4a 75%),
+    linear-gradient(-45deg, transparent 75%, #4a4a4a 75%);
+  background-size: 6px 6px;
+  background-position: 0 0, 0 3px, 3px -3px, -3px 0;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.14);
+}
+
+.swatch.lg {
+  width: 44px;
+  height: 44px;
+  border-radius: 5px;
+}
+
+/* One stripe per mode, so a token that differs across themes shows both. */
+.swatch-part {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.swatch-effect {
+  width: 100%;
+  height: 100%;
+  background: var(--bg-raised);
+  border-radius: inherit;
+}
+
+.swatch.type {
+  background: none;
+  box-shadow: none;
+  align-items: center;
+  justify-content: center;
+  color: var(--text);
+  overflow: visible;
+}
+
+.preview-strip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 12px 0;
+}
+
+/* A filled dot means documented; a hollow ring means nothing written yet. */
+.dot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  border: 1px solid var(--text-faint);
+}
+
+.dot.on {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+/* ─── Home ───────────────────────────────────────────────────────────────── */
+
+.home-head {
+  padding: 16px 12px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.home-file {
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.home-coverage {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+
+.meter {
+  height: 3px;
+  background: var(--border);
+  border-radius: 2px;
+  margin-top: 8px;
+  overflow: hidden;
+}
+
+.meter-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.3s ease;
+}
+
+.footer {
+  flex: 0 0 auto;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 8px;
+}
+
+.btn {
+  flex: 1 1 auto;
+  padding: 9px 12px;
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-strong);
+  text-align: center;
+  font-weight: 500;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--border);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #0d1b26;
+}
+
+.btn.primary:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+/* ─── Claude bridge ──────────────────────────────────────────────────────── */
+
+.btn.small {
+  flex: 0 0 auto;
+  padding: 4px 9px;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.bridge-bar {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 12px;
+  border-top: 1px solid var(--border);
+  font-size: 10px;
+  color: var(--text-faint);
+  flex: 0 0 auto;
+}
+
+.bridge-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+
+.bridge-bar.connected {
+  color: var(--text-dim);
+}
+
+.bridge-bar.connected .bridge-dot {
+  background: #5ad18e;
+}
+
+.bridge-bar.connecting .bridge-dot {
+  background: var(--warn);
+}
+
+.bridge-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bridge-start {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 10px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.bridge-start:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+/* ─── Starting the bridge ────────────────────────────────────────────────── */
+
+.starter {
+  flex: 0 0 auto;
+  padding: 10px 12px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-raised);
+}
+
+.starter-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 11px;
+}
+
+.starter-close {
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+.starter-close:hover {
+  color: var(--text);
+}
+
+.starter-line {
+  margin: 0 0 8px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+
+.starter-line.dim {
+  color: var(--text-faint);
+  font-size: 10px;
+}
+
+.starter-line code {
+  font-family: var(--mono);
+  font-size: 10px;
+}
+
+/* The path can be long and must stay readable — wrap it rather than clipping,
+   and break on the separators so it never spills out of the pane. */
+.starter-path {
+  margin-bottom: 8px;
+  padding: 7px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  font-family: var(--mono);
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--text);
+  word-break: break-all;
+  user-select: all;
+}
+
+.starter-actions {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.starter-actions .btn {
+  flex: 1 1 auto;
+}
+
+/* ─── Drafts ─────────────────────────────────────────────────────────────── */
+
+.drafts {
+  margin: 12px 12px 0;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.drafts-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  background: rgb(124 196 255 / 0.12);
+}
+
+.drafts-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.drafts-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.drafts-note {
+  padding: 6px 10px;
+  font-size: 10px;
+  color: var(--text-faint);
+  border-bottom: 1px solid var(--border);
+}
+
+.draft {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.draft:last-child {
+  border-bottom: none;
+}
+
+.draft-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.draft-section {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent);
+  margin-bottom: 3px;
+}
+
+.draft-text {
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.draft-buttons {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 4px;
+}
+
+/* ─── Detail ─────────────────────────────────────────────────────────────── */
+
+.doc {
+  margin: 12px;
+  padding: 14px 16px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.doc .h {
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.doc .quote {
+  color: var(--text-faint);
+}
+
+.doc .empty {
+  color: var(--text-faint);
+  font-style: italic;
+}
+
+.doc .bullet {
+  color: var(--text);
+}
+
+.doc .warn {
+  color: var(--warn);
+}
+
+.doc.locked {
+  opacity: 0.55;
+  margin-bottom: 0;
+}
+
+.doc.editor {
+  display: block;
+  width: calc(100% - 24px);
+  min-height: 220px;
+  resize: vertical;
+  outline: none;
+  color: var(--text);
+  border-color: var(--border-strong);
+  white-space: pre;
+  overflow-wrap: normal;
+  overflow-x: auto;
+}
+
+.doc.editor:focus {
+  border-color: var(--accent);
+}
+
+.edit-note {
+  margin: 6px 12px 0;
+  font-size: 10px;
+  color: var(--text-faint);
+}
+
+.edit-actions {
+  display: flex;
+  gap: 8px;
+  margin: 10px 12px 12px;
+}
+
+.doc-actions {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: -4px 12px 12px;
+}
+
+.link-btn {
+  font-size: 10px;
+  color: var(--text-dim);
+  border-bottom: 1px dotted var(--text-faint);
+  padding: 0;
+}
+
+.link-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.doc-flag {
+  font-size: 10px;
+  color: var(--warn);
+}
+
+/* Preview of how a multi-sentence note will be split. */
+.split-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+  align-items: baseline;
+}
+
+.split-label {
+  flex: 0 0 auto;
+  color: var(--accent);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  min-width: 62px;
+}
+
+.split-text {
+  flex: 1 1 auto;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--border);
+  padding: 10px 12px 12px;
+}
+
+.sections {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.chip {
+  padding: 4px 9px;
+  border-radius: 99px;
+  border: 1px solid var(--border-strong);
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.chip:hover {
+  border-color: var(--text-faint);
+  color: var(--text);
+}
+
+/* A filled chip already has notes; an outlined one is a gap the designer has
+   not thought about yet. The row doubles as a checklist. */
+.chip.filled {
+  background: var(--bg-raised);
+  border-color: var(--bg-raised);
+  color: var(--text);
+}
+
+.chip.on,
+.chip.filled.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #0d1b26;
+  font-weight: 500;
+}
+
+/* Auto is the default, so it reads as a status rather than a choice — it shows
+   where the note is heading as you type. */
+.chip.auto {
+  border-style: dashed;
+}
+
+.chip.auto.on {
+  background: none;
+  border-style: solid;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.sections.refile {
+  margin: 6px 0 2px;
+}
+
+.entry-section {
+  color: var(--text-dim);
+  font-size: 10px;
+  padding: 0;
+  border-bottom: 1px dotted var(--text-faint);
+}
+
+.entry-section:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.input-bar {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 8px 8px 8px 12px;
+  background: var(--bg);
+}
+
+.input-bar:focus-within {
+  border-color: var(--text-faint);
+}
+
+.input-bar textarea {
+  flex: 1 1 auto;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.5;
+  resize: none;
+  max-height: 120px;
+  padding: 2px 0;
+}
+
+.input-bar textarea::placeholder {
+  color: var(--text-faint);
+}
+
+.icon-btn {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius);
+  color: var(--text-dim);
+}
+
+.icon-btn:hover {
+  background: var(--bg-raised);
+  color: var(--text);
+}
+
+.icon-btn.send {
+  background: var(--accent);
+  color: #0d1b26;
+}
+
+.icon-btn.send:disabled {
+  background: var(--bg-raised);
+  color: var(--text-faint);
+  cursor: default;
+}
+
+.hint {
+  font-size: 10px;
+  color: var(--text-faint);
+  margin-top: 6px;
+  line-height: 1.4;
+}
+
+/* ─── History ────────────────────────────────────────────────────────────── */
+
+.history {
+  margin: 0 12px 12px;
+}
+
+.history-title {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+  margin-bottom: 6px;
+}
+
+.entry {
+  display: flex;
+  gap: 8px;
+  padding: 7px 0;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+}
+
+.entry-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.entry-meta {
+  color: var(--text-faint);
+  font-size: 10px;
+  margin-top: 2px;
+}
+
+.entry-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.entry.gone .entry-text {
+  text-decoration: line-through;
+  color: var(--text-faint);
+}
+
+.entry-editor {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1.5;
+  padding: 6px 8px;
+  resize: vertical;
+  outline: none;
+}
+
+.edit-actions.inline {
+  margin: 6px 0 0;
+}
+
+.entry-meta .partial {
+  color: var(--warn);
+}
+
+.entry-remove {
+  flex: 0 0 auto;
+  color: var(--text-faint);
+  font-size: 10px;
+  opacity: 0;
+}
+
+.entry:hover .entry-remove {
+  opacity: 1;
+}
+
+.entry-remove:hover {
+  color: var(--danger);
+}
+
+/* ─── States ─────────────────────────────────────────────────────────────── */
+
+.state {
+  padding: 32px 24px;
+  text-align: center;
+  color: var(--text-faint);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.banner {
+  margin: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-strong);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.banner.warn {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+.banner.danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+/* A status bar, not an overlay: it sits in the layout so the panes shrink
+   around it instead of it covering the composer. */
+.toast {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* Clear of the resize grip in the corner. */
+  padding: 7px 26px 7px 12px;
+  border-top: 1px solid var(--border-strong);
+  background: var(--bg-raised);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.toast::before {
+  content: '';
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.toast.error {
+  color: var(--danger);
+  border-top-color: var(--danger);
+}
+
+.toast.error::before {
+  background: var(--danger);
+}
+
+/* ─── Project brief ──────────────────────────────────────────────────────── */
+
+.brief {
+  margin: 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.brief-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 12px;
+  background: var(--bg-raised);
+}
+
+.brief-head strong {
+  font-size: 12px;
+}
+
+.brief-head span {
+  font-size: 10px;
+  color: var(--text-faint);
+}
+
+.brief-input {
+  display: block;
+  width: 100%;
+  min-height: 120px;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: none;
+  border-top: 1px solid var(--border);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1.65;
+  resize: vertical;
+  outline: none;
+}
+
+.brief-input::placeholder {
+  color: var(--text-faint);
+}
+
+.brief-input:focus {
+  background: var(--bg-sunken);
+}
+
+.brief-note {
+  padding: 7px 12px;
+  font-size: 10px;
+  color: var(--text-faint);
+  border-top: 1px solid var(--border);
+}
+
+/* ─── Drafting progress ──────────────────────────────────────────────────── */
+
+.drafting {
+  flex: 0 0 auto;
+  padding: 8px 12px 10px;
+  border-bottom: 1px solid var(--border);
+  background: rgb(124 196 255 / 0.08);
+}
+
+.drafting.failed {
+  background: rgb(255 107 107 / 0.1);
+}
+
+.drafting-line {
+  font-size: 11px;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+
+.drafting.failed .drafting-line {
+  color: var(--danger);
+  margin-bottom: 0;
+}
+
+/* Documenting a group itself, as opposed to drilling into it. */
+.folder-note {
+  flex: 0 0 auto;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 99px;
+  font-size: 9px;
+  color: var(--text-faint);
+}
+
+.folder-note:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.folder-note.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #0d1b26;
+}
+
+/* ─── Tidying status ─────────────────────────────────────────────────────── */
+
+.polish {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  padding: 7px 12px;
+  border-top: 1px solid var(--border);
+  font-size: 10px;
+  color: var(--text-faint);
+}
+
+.polish.working {
+  color: var(--accent);
+}
+
+.polish.failed {
+  color: var(--warn);
+}
+
+.polish-spinner {
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: polish-spin 0.7s linear infinite;
+}
+
+@keyframes polish-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ─── Send modes ─────────────────────────────────────────────────────────── */
+
+.send-group {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  flex: 0 0 auto;
+}
+
+.icon-btn.caret {
+  width: 18px;
+  font-size: 9px;
+  background: var(--accent);
+  color: #0d1b26;
+  border-radius: var(--radius);
+}
+
+.icon-btn.caret:hover {
+  filter: brightness(1.1);
+}
+
+.send-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  width: 240px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  overflow: hidden;
+  z-index: 30;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.4);
+}
+
+.send-option {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.send-option:last-child {
+  border-bottom: none;
+}
+
+.send-option:hover:not(:disabled) {
+  background: var(--border);
+}
+
+.send-option:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.send-option.on .send-option-name {
+  color: var(--accent);
+}
+
+.send-option-name {
+  display: block;
+  font-size: 11px;
+}
+
+.send-option-hint {
+  display: block;
+  font-size: 9px;
+  color: var(--text-faint);
+  margin-top: 2px;
+}
+
+/* ─── Claude's reply ─────────────────────────────────────────────────────── */
+
+.answer {
+  flex: 0 0 auto;
+  margin: 0 12px 10px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.answer.failed {
+  border-color: var(--danger);
+}
+
+.answer-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 6px 10px;
+  background: rgb(124 196 255 / 0.12);
+  font-size: 10px;
+  color: var(--accent);
+}
+
+.answer.failed .answer-head {
+  background: rgb(255 107 107 / 0.1);
+  color: var(--danger);
+}
+
+.answer-body {
+  padding: 9px 10px;
+  font-size: 11px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+/* ─── Activity ───────────────────────────────────────────────────────────── */
+
+.activity {
+  overflow-y: auto;
+}
+
+.activity-head {
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.activity-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.activity-pool {
+  font-size: 10px;
+  color: var(--text-faint);
+  margin-top: 3px;
+}
+
+.activity-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.activity-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.activity-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+}
+
+.activity-kind {
+  flex: 0 0 auto;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 1px 6px;
+  border-radius: 99px;
+  border: 1px solid var(--border-strong);
+  color: var(--text-faint);
+}
+
+.activity-kind.draft {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.activity-detail {
+  font-size: 10px;
+  color: var(--text-faint);
+  margin-top: 3px;
+}
+
+.activity-row.failed .activity-detail {
+  color: var(--danger);
+}
+
+.activity-row.done .activity-detail {
+  color: #5ad18e;
+}
+
+.activity-row .meter {
+  margin-top: 7px;
+}
+
+.activity-kind.tidy {
+  color: #5ad18e;
+  border-color: #5ad18e;
+}
+
+.activity-tabs {
+  display: flex;
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--border);
+}
+
+.activity-tab {
+  flex: 1 1 0;
+  padding: 10px 8px;
+  font-size: 11px;
+  color: var(--text-faint);
+  border-bottom: 2px solid transparent;
+}
+
+.activity-tab:hover {
+  color: var(--text);
+}
+
+.activity-tab.on {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}

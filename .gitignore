@@ -1,0 +1,19 @@
+# Dependencies — 68 MB of thousands of tiny files across the two installs.
+node_modules/
+bridge/node_modules/
+
+# Build output. `npm run build` regenerates it; `npm run package` regenerates
+# the zip. Committing either would mean every rebuild shows as a diff.
+dist/
+package/
+
+# A convenience alias someone made pointing at this machine's Google Drive.
+# The real launcher lives in bridge/ and is committed; an absolute symlink
+# would be meaningless on anyone else's machine.
+/Start Claude bridge.command
+
+# Scratch left over from working out whether the executable bit survives on a
+# Drive mount.
+bridge/.chmodtest.command
+
+.DS_Store
