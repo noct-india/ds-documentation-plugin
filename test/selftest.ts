@@ -1101,6 +1101,114 @@ section('variants: a variant is documented as itself, not as its set')
   )
 }
 
+section('export: carries the writing, not what Figma Make already has')
+
+{
+  const structure = {
+    typeLabel: 'Component set',
+    variantCount: 176,
+    parentName: 'Actions',
+    description: 'Primary interactive control.',
+    nestedComponents: ['Icon'],
+    properties: [
+      {
+        key: 'Size',
+        displayName: 'Size',
+        type: 'VARIANT' as const,
+        defaultValue: '36',
+        options: ['28', '36'],
+      },
+    ],
+  }
+  const log: NoteEntry[] = [
+    {
+      id: '1',
+      ts: 1,
+      author: 'Anusha',
+      text: 'Only one primary per section.',
+      section: 'rules' as SectionKey,
+    },
+  ]
+
+  const shipped = renderEntityDoc('Button', 'componentSet', structure, log, {
+    includeEmptySections: false,
+    notesOnly: true,
+  })
+
+  check('the note survives', shipped.indexOf('Only one primary per section.') !== -1)
+  check('the property table does not', shipped.indexOf('| Property |') === -1)
+  check('nor the variant count', shipped.indexOf('176 variants') === -1)
+  check('nor the nesting list', shipped.indexOf('Nests:') === -1)
+  // Figma's own description field is already on the component in the library.
+  check('nor Figma\'s description', shipped.indexOf('Primary interactive control') === -1)
+
+  // The plugin's own pane still shows all of it — a designer writing a rule
+  // about Size=28 wants the table in front of them. Same data, different reader.
+  const onScreen = renderEntityDoc('Button', 'componentSet', structure, log, {
+    includeEmptySections: true,
+  })
+  check('the detail pane still shows the property table', onScreen.indexOf('| Property |') !== -1)
+}
+
+{
+  // Token values are the exception: Figma documents Make's extraction of them
+  // as partial, so a documented variable still states what it resolves to.
+  const withValues = renderEntityDoc(
+    'neutral/1000',
+    'variable',
+    {
+      typeLabel: 'COLOR',
+      modeValues: [
+        { modeName: 'Light', value: '`#0A0A0A`' },
+        { modeName: 'Dark', value: '`#FAFAFA`' },
+      ],
+    },
+    [{ id: '1', ts: 1, author: 'A', text: 'Body text only.', section: 'rules' as SectionKey }],
+    { includeEmptySections: false, notesOnly: true, level: 3 }
+  )
+
+  check('a documented token keeps its values', withValues.indexOf('#0A0A0A') !== -1)
+  check(
+    'the values table nests under the entity heading',
+    withValues.indexOf('#### Values by mode') !== -1
+  )
+  check('and it does not outrank its own title', withValues.indexOf('\n## Values') === -1)
+}
+
+{
+  // An alias must never export as the colour it happens to resolve to: theming
+  // modes live on the primitive, and a hardcoded hex severs the chain for every
+  // level below it.
+  const alias = renderEntityDoc(
+    'text/primary',
+    'variable',
+    {
+      typeLabel: 'COLOR',
+      modeValues: [{ modeName: 'Value', value: '→ `Primitive Colors/neutral/1000`' }],
+    },
+    [{ id: '1', ts: 1, author: 'A', text: 'Default body colour.', section: 'rules' as SectionKey }],
+    { includeEmptySections: false, notesOnly: true }
+  )
+
+  check('an alias exports as a reference', alias.indexOf('Primitive Colors/neutral/1000') !== -1)
+  check('never as a resolved hex', alias.indexOf('#0A0A0A') === -1)
+  check('and the reference is qualified by collection', alias.indexOf('Primitive Colors/') !== -1)
+}
+
+{
+  // Nothing undocumented ships, so the placeholder warning has nothing to warn
+  // about — absence is what says "nobody wrote a rule for this".
+  const bare = renderEntityDoc(
+    'Untouched',
+    'componentSet',
+    { typeLabel: 'Component set' },
+    [],
+    { includeEmptySections: false, notesOnly: true }
+  )
+  check('an undocumented entity renders no warning block', bare.indexOf('⚠️') === -1)
+  check('it is just the heading', bare.trim() === '# Untouched')
+}
+
 // ─── Result ──────────────────────────────────────────────────────────────────
 
 console.log(

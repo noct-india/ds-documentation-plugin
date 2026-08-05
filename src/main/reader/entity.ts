@@ -151,7 +151,7 @@ export async function resolveEntity(
     return {
       host: style,
       name: style.name,
-      structure: styleStructure(style, entityKind as StyleKind),
+      structure: await styleStructure(style, entityKind as StyleKind),
     }
   }
 

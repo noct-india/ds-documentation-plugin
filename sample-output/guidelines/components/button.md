@@ -1,21 +1,5 @@
 # Button
 
-> Component set · 176 variants · in `Actions`
-
-_Primary interactive control._
-
-## Variants and properties
-
-| Property | Type | Options | Default | Notes |
-|---|---|---|---|---|
-| `Type` | VARIANT | `Primary - brand`, `Primary - buy`, `Secondary - grey`, `Tertiary` | `Primary - brand` | — |
-| `Size` | VARIANT | `28`, `36`, `40`, `48` | `36` | — |
-| `State` | VARIANT | `Default`, `Hover`, `Pressed`, `Disabled` | `Default` | — |
-| `IconLeading` | BOOLEAN | — | `false` | Shows the leading icon slot. |
-| `Label` | TEXT | — | `Button` | — |
-
-Nests: `Icon`
-
 ## Purpose
 
 - The primary interactive control. Every action a user can take is a Button.

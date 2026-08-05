@@ -9,6 +9,7 @@ import { liveNoteCount, readLog, scopedHost } from '../storage'
 import { ancestorPaths, folderKeyPrefix } from '../../shared/folder'
 import { buildTree, renderTreeOutline, type TreeInput } from '../../shared/tree'
 import { cssEffects, cssPaints, fontWeight } from './paint'
+import { variableRef } from './variables'
 
 export type StyleKind = 'paintStyle' | 'textStyle' | 'effectStyle'
 
@@ -138,7 +139,45 @@ function describeEffect(effect: Effect): string {
   }
 }
 
-export function styleStructure(style: BaseStyle, kind: StyleKind): EntityStructure {
+/**
+ * A style's value, as a variable reference where it is bound to one.
+ *
+ * A colour style painted from `neutral/1000` must never export as `#0A0A0A`.
+ * The hex is only what it resolves to in whichever mode happened to be active;
+ * the binding is the rule.
+ *
+ * This matters more than it looks. Theming modes are usually set at the
+ * primitive level and reach everything above them through the alias chain, so a
+ * hardcoded value anywhere in that chain severs the connection for every level
+ * below it — the style stops responding to the mode, and so does every
+ * component painted with it. Exporting the reference is what keeps a theme
+ * switch working end to end.
+ */
+async function boundOrLiteral(
+  bound: VariableAlias | undefined,
+  literal: string
+): Promise<string> {
+  if (!bound) return `\`${literal}\``
+  return variableRef(bound)
+}
+
+/**
+ * The colour binding on a paint or effect, where the union member has one.
+ *
+ * Only some members carry `boundVariables` — a gradient paint and a shader
+ * effect do not — so this narrows rather than casting, and an unbindable member
+ * simply reports nothing.
+ */
+function colorBinding(value: Paint | Effect): VariableAlias | undefined {
+  if (!('boundVariables' in value)) return undefined
+  const bound = value.boundVariables as { color?: VariableAlias } | undefined
+  return bound?.color
+}
+
+export async function styleStructure(
+  style: BaseStyle,
+  kind: StyleKind
+): Promise<EntityStructure> {
   const base: EntityStructure = {
     typeLabel:
       kind === 'paintStyle' ? 'Color style' : kind === 'textStyle' ? 'Text style' : 'Effect style',
@@ -148,18 +187,26 @@ export function styleStructure(style: BaseStyle, kind: StyleKind): EntityStructu
 
   if (kind === 'paintStyle') {
     const paints = (style as PaintStyle).paints
-    base.modeValues = paints.map((paint, i) => ({
-      modeName: paints.length > 1 ? `Layer ${i + 1}` : 'Value',
-      value: `\`${describePaint(paint)}\``,
-    }))
+    base.modeValues = []
+    for (let i = 0; i < paints.length; i++) {
+      const paint = paints[i]
+      base.modeValues.push({
+        modeName: paints.length > 1 ? `Layer ${i + 1}` : 'Value',
+        value: await boundOrLiteral(colorBinding(paint), describePaint(paint)),
+      })
+    }
   }
 
   if (kind === 'effectStyle') {
     const effects = (style as EffectStyle).effects
-    base.modeValues = effects.map((effect, i) => ({
-      modeName: effects.length > 1 ? `Effect ${i + 1}` : 'Value',
-      value: `\`${describeEffect(effect)}\``,
-    }))
+    base.modeValues = []
+    for (let i = 0; i < effects.length; i++) {
+      const effect = effects[i]
+      base.modeValues.push({
+        modeName: effects.length > 1 ? `Effect ${i + 1}` : 'Value',
+        value: await boundOrLiteral(colorBinding(effect), describeEffect(effect)),
+      })
+    }
   }
 
   if (kind === 'textStyle') {
@@ -173,11 +220,23 @@ export function styleStructure(style: BaseStyle, kind: StyleKind): EntityStructu
         ? '0'
         : `${text.letterSpacing.value}${text.letterSpacing.unit === 'PERCENT' ? '%' : 'px'}`
 
+    // Type scales get bound to number variables for the same reason colours do:
+    // a density or breakpoint mode moves them all at once.
+    const bound = text.boundVariables
     base.modeValues = [
-      { modeName: 'Font', value: `\`${text.fontName.family} ${text.fontName.style}\`` },
-      { modeName: 'Size', value: `\`${text.fontSize}px\`` },
-      { modeName: 'Line height', value: `\`${lineHeight}\`` },
-      { modeName: 'Letter spacing', value: `\`${letterSpacing}\`` },
+      {
+        modeName: 'Font',
+        value: await boundOrLiteral(
+          bound?.fontFamily,
+          `${text.fontName.family} ${text.fontName.style}`
+        ),
+      },
+      { modeName: 'Size', value: await boundOrLiteral(bound?.fontSize, `${text.fontSize}px`) },
+      { modeName: 'Line height', value: await boundOrLiteral(bound?.lineHeight, lineHeight) },
+      {
+        modeName: 'Letter spacing',
+        value: await boundOrLiteral(bound?.letterSpacing, letterSpacing),
+      },
     ]
     if (text.textCase !== 'ORIGINAL') {
       base.modeValues.push({ modeName: 'Case', value: `\`${text.textCase}\`` })

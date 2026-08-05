@@ -348,16 +348,16 @@ document from the log and drop every manual edit.
 guidelines/
   Guidelines.md              entry point Make reads first — character, reading order, rules
   foundations/
-    overview.md              collections + styles index
-    primitivecolors.md       one file per variable collection, modes documented
-    colorstyles.md           folder structure preserved in a Structure block
+    overview.md              index of what carries documentation
+    primitivecolors.md       a collection, with the tokens someone wrote about
+    colorstyles.md           only documented styles appear
     textstyles.md
     effectstyles.md
   components/
-    overview.md              catalogue, grouped by page and section
+    overview.md              catalogue of documented components, by page and section
     icons/                   ← one folder per Figma page
       navigation/            ← one folder per section on that page
-        chevron.md
+        chevron.md           ← exists because someone wrote a rule for it
     actions/
       buttons/
         button.md
@@ -379,11 +379,40 @@ files".
 
 See `sample-output/` for real generated output.
 
-**One file per component, always** — including icons, which are individual components in
-this system rather than a single icon set. A 400-icon page therefore produces 400 files,
-foldered under its page and section. This is deliberate: each icon can carry its own
-usage note, and the folder tree is what keeps that navigable. Do not collapse a section
-into one file.
+**Only documented things are exported, and only what was written about them.**
+
+Figma Make imports the library itself, so it already has every component name, property,
+variant, style and token. Restating those in markdown is the same fact twice — and the
+copy in the file is the one that goes stale, silently, the moment someone adds a variant.
+A stale rule gets followed exactly as faithfully as a true one.
+
+So a component nobody has written about produces no file at all, and a component that has
+been documented produces a file containing its heading and the writing. No property
+table, no variant count, no nesting list, no folder tree.
+
+This replaced an earlier design where every component got a file carrying its full
+property table plus a "not documented yet" warning, on the theory that an agent should be
+able to tell *no rule* from *no constraint*. At 200+ components that inverted: the
+warnings became the export and the handful of real rules were buried in them. Absence now
+carries the same meaning, and the file that exists is the file worth reading.
+
+**Token values are the one exception.** Figma's own docs say Make gets "a simplified
+version" of variables converted to CSS values, and that Make kits "don't support full
+extraction of design tokens" — so a documented variable or style still states what it
+resolves to.
+
+**And a value that is bound to a variable exports as the reference, never the literal.**
+A colour style painted from `neutral/1000` exports as `→ Primitive Colors/neutral/1000`,
+not `#0A0A0A`. This is not tidiness. Theming modes are set at the primitive level and
+reach everything above them through the alias chain, so a hardcoded value anywhere in
+that chain severs it for every level below — the style stops answering to the mode, and
+so does every component painted with it. References are what keep a theme switch working
+end to end. The same applies to type scales bound to number variables.
+
+**One file per documented component** — including icons, which are individual components
+in this system rather than a single icon set, foldered under their page and section. Each
+icon can carry its own usage note, and the folder tree keeps that navigable. Do not
+collapse a section into one file.
 
 ## Voice input
 

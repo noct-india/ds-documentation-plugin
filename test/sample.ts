@@ -41,7 +41,7 @@ const collection = renderEntityDoc(
     note('rules', 'Every primitive must have at least one semantic alias pointing at it. An unaliased primitive is dead weight.', 4),
     note('donts', 'Do not add a new primitive to solve a one-off. Add a semantic alias to an existing one instead.', 5),
   ],
-  { includeEmptySections: false }
+  { includeEmptySections: false, notesOnly: true }
 )
 
 const variables = [
@@ -62,7 +62,7 @@ const variables = [
       note('instead', 'For secondary or supporting text use `neutral/700`. For anything on a coloured surface use `content/on-brand`.', 3),
       note('donts', 'Never reference this hex directly. Consumers use the semantic token `content/primary`.', 4),
     ],
-    { includeEmptySections: false, level: 3 }
+    { includeEmptySections: false, notesOnly: true, level: 3 }
   ),
   renderEntityDoc(
     'brand/blue-500',
@@ -76,7 +76,7 @@ const variables = [
       ],
     },
     [note('rules', 'Brand blue is an accent. Never use it as a background for cards, panels or large areas.', 1)],
-    { includeEmptySections: false, level: 3 }
+    { includeEmptySections: false, notesOnly: true, level: 3 }
   ),
 ]
 
@@ -119,7 +119,7 @@ write(
       note('donts', 'Do not use Tertiary for a destructive action — it reads as a link.', 10),
       note('notes', 'State is driven by the interaction-alias variable mode; the layer structure is identical across all four states.', 11),
     ],
-    { includeEmptySections: false }
+    { includeEmptySections: false, notesOnly: true }
   )
 )
 
@@ -139,7 +139,7 @@ write(
       ],
     },
     [],
-    { includeEmptySections: false }
+    { includeEmptySections: false, notesOnly: true }
   )
 )
 

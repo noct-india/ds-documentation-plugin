@@ -12,7 +12,7 @@ import type { ExportFile, NoteEntry } from '../../shared/types'
 import { componentDir, uniqueSlugger } from '../../shared/slug'
 import { liveNoteCount, readIndex, readLog } from '../storage'
 import { allComponents, componentStructure, UNGROUPED_NAME } from '../reader/components'
-import { getStyles, styleStructure, styleStructureTree, type StyleKind } from '../reader/styles'
+import { getStyles, styleStructure, type StyleKind } from '../reader/styles'
 import { collectionStructure, getCollections, variablesIn, variableStructure } from '../reader/variables'
 import { isDocumented, renderAuthoredSections, renderEntityDoc, renderStructure } from './render'
 import { readBody, type PluginDataHost } from '../storage'
@@ -73,7 +73,17 @@ function renderVariantNotes(component: ComponentNode | ComponentSetNode): string
 
 type Progress = (message: string) => void
 
-const EXPORT_OPTIONS = { includeEmptySections: false } as const
+/**
+ * Figma Make reads the library itself, so the export carries only what it
+ * cannot get from there: the writing.
+ *
+ * `notesOnly` drops generated structure — property tables, variant counts,
+ * folder trees — because restating them is both redundant and a liability: the
+ * copy in the markdown goes stale the moment someone adds a variant, and a
+ * stale rule is followed as faithfully as a true one. Token values survive; see
+ * `renderExportHeader`.
+ */
+const EXPORT_OPTIONS = { includeEmptySections: false, notesOnly: true } as const
 
 interface Manifest {
   collections: Array<{ name: string; file: string; variables: number; documented: number }>
@@ -98,6 +108,14 @@ export async function buildExport(progress: Progress): Promise<ExportFile[]> {
 
   for (const collection of collections) {
     const variables = await variablesIn(collection)
+    const collectionLog = readLog(collection)
+
+    // Only tokens somebody has written about. An undocumented one is a name
+    // Make already has from the library, so listing it here adds nothing and
+    // buries the ones that carry a rule.
+    const documentedVars = variables.filter((v) => isDocumented(readLog(v)))
+    if (!isDocumented(collectionLog) && documentedVars.length === 0) continue
+
     const name = `${collectionSlug(collection.name)}.md`
     const path = `guidelines/foundations/${name}`
 
@@ -107,32 +125,24 @@ export async function buildExport(progress: Progress): Promise<ExportFile[]> {
         collection.name,
         'collection',
         await collectionStructure(collection),
-        readLog(collection)
+        collectionLog
       ),
     ]
 
-    if (collection.modes.length > 1) {
-      blocks.push(
-        '> Mode purposes are documented in the section above. Every variable below resolves per mode.\n'
-      )
-    }
-
-    blocks.push('## Variables\n')
-
-    let documented = 0
-    for (const variable of variables) {
-      const log = readLog(variable)
-      if (isDocumented(log)) documented += 1
-      blocks.push(
-        renderForExport(
-          variable,
-          variable.name,
-          'variable',
-          await variableStructure(variable),
-          log,
-          3
+    if (documentedVars.length > 0) {
+      blocks.push('## Variables\n')
+      for (const variable of documentedVars) {
+        blocks.push(
+          renderForExport(
+            variable,
+            variable.name,
+            'variable',
+            await variableStructure(variable),
+            readLog(variable),
+            3
+          )
         )
-      )
+      }
     }
 
     files.push({ path, content: blocks.join('\n') })
@@ -140,7 +150,7 @@ export async function buildExport(progress: Progress): Promise<ExportFile[]> {
       name: collection.name,
       file: `foundations/${name}`,
       variables: variables.length,
-      documented,
+      documented: documentedVars.length,
     })
   }
 
@@ -154,30 +164,23 @@ export async function buildExport(progress: Progress): Promise<ExportFile[]> {
   for (const group of styleGroups) {
     progress(`Reading ${group.label.toLowerCase()}…`)
     const styles = await getStyles(group.kind)
-    if (styles.length === 0) continue
+    const documented = styles.filter((s) => isDocumented(readLog(s)))
+    if (documented.length === 0) continue
 
-    const tree = await styleStructureTree(group.kind)
-    const blocks: string[] = [
-      `# ${group.label}`,
-      '',
-      `> ${styles.length} style${styles.length === 1 ? '' : 's'}`,
-      '',
-      '## Structure',
-      '',
-      '```',
-      tree,
-      '```',
-      '',
-      '## Styles',
-      '',
-    ]
+    // No folder tree: Make can see the "/" grouping in the style names it
+    // already imported, and a tree here would go stale on the next rename.
+    const blocks: string[] = [`# ${group.label}`, '']
 
-    let documented = 0
-    for (const style of styles) {
-      const log = readLog(style)
-      if (isDocumented(log)) documented += 1
+    for (const style of documented) {
       blocks.push(
-        renderForExport(style, style.name, group.kind, styleStructure(style, group.kind), log, 3)
+        renderForExport(
+          style,
+          style.name,
+          group.kind,
+          await styleStructure(style, group.kind),
+          readLog(style),
+          2
+        )
       )
     }
 
@@ -186,7 +189,7 @@ export async function buildExport(progress: Progress): Promise<ExportFile[]> {
       label: group.label,
       file: `foundations/${group.file}`,
       count: styles.length,
-      documented,
+      documented: documented.length,
     })
   }
 
@@ -203,6 +206,19 @@ export async function buildExport(progress: Progress): Promise<ExportFile[]> {
   const sluggers = new Map<string, (name: string) => string>()
 
   for (const { page, section, component } of found) {
+    const log = readLog(component)
+    const variantNotes = renderVariantNotes(component)
+
+    // A component nobody has written about gets no file. Its name, properties
+    // and variants are already in the library Make imported; a file restating
+    // them would be noise in front of the handful that carry a real rule.
+    //
+    // The previous behaviour — a file per component with a "not documented yet"
+    // warning — was meant to distinguish "no rule" from "no constraint". With
+    // 200+ components that inverted: the warnings were the export, and the
+    // rules were buried in them. Absence says the same thing more quietly.
+    if (!isDocumented(log) && !variantNotes) continue
+
     // Mirror how the designer arranged the file: page, then section.
     const dir = componentDir(page, section === UNGROUPED_NAME ? null : section)
 
@@ -213,7 +229,6 @@ export async function buildExport(progress: Progress): Promise<ExportFile[]> {
     }
 
     const file = `${dir}/${nextSlug(component.name)}.md`
-    const log = readLog(component)
     const content = renderForExport(
       component,
       component.name,
@@ -224,13 +239,13 @@ export async function buildExport(progress: Progress): Promise<ExportFile[]> {
     // Variants do not get files of their own — individual components do, and a
     // variant is a state of one, not another component. Anything documented
     // about a single combination lands inside its component's file.
-    files.push({ path: `guidelines/${file}`, content: content + renderVariantNotes(component) })
+    files.push({ path: `guidelines/${file}`, content: content + variantNotes })
     manifest.components.push({
       name: component.name,
       file,
       page,
       section,
-      documented: isDocumented(log),
+      documented: true,
     })
   }
 

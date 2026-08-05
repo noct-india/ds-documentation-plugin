@@ -188,15 +188,25 @@ function isAlias(value: VariableValue): value is VariableAlias {
 /**
  * Renders one mode's value for display and export.
  *
- * Aliases resolve to the target's name rather than its colour: for a semantic
- * token, "→ color/blue/500" is the fact worth documenting, not the hex it
- * happens to point at today.
+ * An alias renders as the reference itself, never as the colour at the end of
+ * the chain. This is the whole point of a semantic token: exporting
+ * `text-primary = #0A0A0A` teaches an agent to hardcode the hex, which is
+ * exactly what the alias exists to prevent. `→ Primitive Colors/neutral/1000`
+ * teaches it to follow the reference.
+ *
+ * The target is qualified with its collection, because a bare `neutral/1000`
+ * does not say which collection it lives in — and two collections in the same
+ * file may well each have one.
  */
+export async function variableRef(alias: VariableAlias): Promise<string> {
+  const target = await figma.variables.getVariableByIdAsync(alias.id)
+  if (!target) return '→ (unresolved alias)'
+  const owner = await figma.variables.getVariableCollectionByIdAsync(target.variableCollectionId)
+  return `→ \`${owner ? `${owner.name}/${target.name}` : target.name}\``
+}
+
 export async function formatValue(value: VariableValue): Promise<string> {
-  if (isAlias(value)) {
-    const target = await figma.variables.getVariableByIdAsync(value.id)
-    return target ? `→ \`${target.name}\`` : '→ (unresolved alias)'
-  }
+  if (isAlias(value)) return variableRef(value)
   if (typeof value === 'boolean') return String(value)
   if (typeof value === 'number') return String(value)
   if (typeof value === 'string') return value

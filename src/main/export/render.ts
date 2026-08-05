@@ -21,6 +21,19 @@ export interface RenderOptions {
   includeEmptySections: boolean
   /** Heading level for the entity title — `#` standalone, `###` when nested. */
   level?: number
+  /**
+   * Export only: leave out everything Figma Make already reads from the library.
+   *
+   * Make imports the library itself, so a property table, a variant count or a
+   * folder tree in the markdown is the same fact stated twice — and the copy in
+   * the file goes stale the moment someone adds a variant. What Make cannot
+   * recover is why any of it exists, so that is all the export carries.
+   *
+   * Token values are the exception: Figma's own docs say Make gets "a
+   * simplified version" of variables converted to CSS, and that Make kits
+   * "don't support full extraction of design tokens".
+   */
+  notesOnly?: boolean
 }
 
 function heading(level: number, text: string): string {
@@ -86,14 +99,16 @@ function renderContextLine(structure: EntityStructure): string {
   return `> ${parts.join(' · ')}`
 }
 
-function renderValues(structure: EntityStructure): string {
+// Takes the entity heading level so a variable rendered as `###` inside a
+// collection file does not sprout a `##` table underneath it.
+function renderValues(structure: EntityStructure, level = 1): string {
   if (!structure.modeValues || structure.modeValues.length === 0) return ''
   const isModes = structure.modeValues.length > 1
   const rows = structure.modeValues
     .map((mv) => `| ${escapeCell(mv.modeName)} | ${escapeCell(mv.value)} |`)
     .join('\n')
   return [
-    heading(2, isModes ? 'Values by mode' : 'Value'),
+    heading(level + 1, isModes ? 'Values by mode' : 'Value'),
     '',
     `| ${isModes ? 'Mode' : 'Property'} | Value |`,
     '|---|---|',
@@ -174,11 +189,33 @@ export function renderStructure(
   if (structure.description) blocks.push(`_${structure.description.trim()}_`)
 
   blocks.push(renderModes(structure))
-  blocks.push(renderValues(structure))
+  blocks.push(renderValues(structure, level))
   blocks.push(renderProperties(structure))
   blocks.push(renderStructureTree(structure))
 
   return blocks.filter(Boolean).join('\n\n')
+}
+
+/**
+ * The heading, and nothing else Figma Make can work out for itself.
+ *
+ * Values survive because Make's token extraction is documented as partial — a
+ * hex per mode is the one generated fact worth restating. Property tables,
+ * variant counts, nesting and folder trees do not: Make reads the library.
+ *
+ * The plugin's own detail pane still uses `renderStructure`, because a designer
+ * writing a rule about `Size=28` wants the property table in front of them. The
+ * difference is the audience, not the data.
+ */
+export function renderExportHeader(
+  name: string,
+  kind: EntityKind,
+  structure: EntityStructure,
+  level = 1
+): string {
+  return [heading(level, titleFor(name, kind)), renderValues(structure, level)]
+    .filter(Boolean)
+    .join('\n\n')
 }
 
 export function renderEntityDoc(
@@ -189,10 +226,13 @@ export function renderEntityDoc(
   options: RenderOptions
 ): string {
   const level = options.level ?? 1
-  const blocks: string[] = [renderStructure(name, kind, structure, level)]
+  const blocks: string[] = [
+    options.notesOnly
+      ? renderExportHeader(name, kind, structure, level)
+      : renderStructure(name, kind, structure, level),
+  ]
 
   const groups = groupBySection(log)
-  const documented = groups.size > 0
 
   for (const key of orderedSections(kind, groups)) {
     const entries = groups.get(key) ?? []
@@ -203,7 +243,11 @@ export function renderEntityDoc(
     )
   }
 
-  if (!documented && !options.includeEmptySections) {
+  // No "not documented yet" placeholder in a notes-only export: nothing
+  // undocumented is written at all, so the warning would have nothing to warn
+  // about. Absence carries the meaning instead — a name missing from the
+  // guidelines is a name nobody has written a rule for.
+  if (groups.size === 0 && !options.includeEmptySections && !options.notesOnly) {
     blocks.push(
       `> ⚠️ Not documented yet — no usage rules have been written for this ${structure.typeLabel.toLowerCase()}. Do not infer constraints for it; ask instead.`
     )

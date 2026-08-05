@@ -1,22 +1,5 @@
 # Collection: Primitive Colors
 
-> Variable collection · 3 variables
-
-## Modes
-
-- `Light`
-- `Dark`
-
-## Structure
-
-```
-neutral/
-  1000
-  900
-brand/
-  blue-500
-```
-
 ## Purpose
 
 - Raw palette. Never referenced directly by a designer or a developer — always go through a semantic alias in `Color - General alias`.
@@ -41,9 +24,7 @@ brand/
 
 ### Variable: neutral/1000
 
-> COLOR · in `Primitive Colors`
-
-## Values by mode
+#### Values by mode
 
 | Mode | Value |
 |---|---|
@@ -68,9 +49,7 @@ brand/
 
 ### Variable: brand/blue-500
 
-> COLOR · in `Primitive Colors`
-
-## Values by mode
+#### Values by mode
 
 | Mode | Value |
 |---|---|
