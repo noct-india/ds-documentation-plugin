@@ -7,7 +7,7 @@
 // Figma throws above 100 kB per (pluginId, key, value) entry, so payloads are
 // split across numbered keys and the count is recorded in a small header.
 
-import type { EntityKind, EntityMeta, NoteEntry, SectionKey } from '../shared/types'
+import type { DocumentedCounts, EntityKind, EntityMeta, NoteEntry, SectionKey } from '../shared/types'
 
 /**
  * The subset of the Figma API we need to read/write notes.
@@ -459,6 +459,65 @@ export interface IndexEntry {
 }
 
 export type RootIndex = Record<string, IndexEntry>
+
+/**
+ * How many entities of each kind carry at least one approved note.
+ *
+ * Pure, and separate from the Figma lookups, because the three things that make
+ * it wrong are all quiet: counting an orphan whose object was deleted, counting
+ * an entity whose only notes are unapproved drafts, and dropping a kind on the
+ * floor when a new one is added. `alive` comes from the caller's existence
+ * check so this stays synchronous.
+ */
+export function countDocumented(
+  entries: Array<{ entry: IndexEntry; alive: boolean }>
+): DocumentedCounts {
+  const counts: DocumentedCounts = {
+    collections: 0,
+    variables: 0,
+    paintStyles: 0,
+    textStyles: 0,
+    effectStyles: 0,
+    components: 0,
+    variants: 0,
+  }
+
+  for (const { entry, alive } of entries) {
+    // noteCount is live notes only — drafts are tracked separately — so this
+    // one guard covers both "nothing written" and "only unapproved guesses".
+    if (!alive || entry.noteCount <= 0) continue
+    switch (entry.kind) {
+      case 'collection':
+        counts.collections += 1
+        break
+      case 'variable':
+        counts.variables += 1
+        break
+      case 'paintStyle':
+        counts.paintStyles += 1
+        break
+      case 'textStyle':
+        counts.textStyles += 1
+        break
+      case 'effectStyle':
+        counts.effectStyles += 1
+        break
+      case 'component':
+      case 'componentSet':
+        counts.components += 1
+        break
+      case 'variant':
+        counts.variants += 1
+        break
+      default:
+        // folder, page, section and project are documented but are not things
+        // the coverage table counts — they have no denominator to be a share of.
+        break
+    }
+  }
+
+  return counts
+}
 
 function readIndexChunkCount(): number {
   try {

@@ -79,12 +79,39 @@ export function Detail({
    */
   const [shell, setShell] = useState<EntityDetail | null>(null)
 
+  /**
+   * The viewer's picker, held here rather than inside the viewer.
+   *
+   * Changing the write target reloads the notes, and the viewer unmounts while
+   * that happens — so state living inside it was reseeded from the first
+   * variant on every remount. Choosing "Tertiary" and then clicking the variant
+   * chip snapped straight back to "Primary". Up here it survives a target
+   * change and resets only when a different component is opened.
+   */
+  const [chosen, setChosen] = useState<Record<string, string>>({})
+  const [overrides, setOverrides] = useState<Record<string, string | boolean>>({})
+
   // A new entity is a fresh start: the target must never survive navigation, or
   // the next component would open still pointed at the last one's variant.
   useEffect(() => {
     setTarget(asTarget(entityId, entityKind, name))
     setShell(null)
+    setChosen({})
+    setOverrides({})
   }, [entityId, entityKind])
+
+  // Seed the picker once the component's variants are known — the one selected
+  // on canvas, else the first, which for a set Figma lays out top-left-first is
+  // its default. Guarded on being unset so a target change never reseeds it.
+  useEffect(() => {
+    const variants = shell?.structure.variants
+    if (!variants || variants.length === 0) return
+    if (Object.keys(chosen).length > 0) return
+    const opening = initialVariantId
+      ? variants.find((v) => v.id === initialVariantId)
+      : variants[0]
+    if (opening) setChosen(opening.properties)
+  }, [shell])
 
   useEffect(() => {
     let cancelled = false
@@ -223,7 +250,34 @@ export function Detail({
     }
   }
 
-  if (!detail) return <div className="state">Loading…</div>
+  // Built before the loading guard below, because the viewer belongs to the
+  // component that was opened — not to whatever the notes are currently being
+  // written to. Switching the write target reloads the notes; the picture and
+  // the picker have no reason to disappear while that happens, and unmounting
+  // them is what used to reset the picker.
+  const viewer =
+    shell !== null && editing === null && (entityKind === 'component' || entityKind === 'componentSet') ? (
+      <ComponentViewer
+        entityId={entityId}
+        name={name}
+        structure={shell.structure}
+        chosen={chosen}
+        onChosenChange={setChosen}
+        overrides={overrides}
+        onOverridesChange={setOverrides}
+        target={target}
+        onTargetChange={setTarget}
+      />
+    ) : null
+
+  if (!detail) {
+    return (
+      <div className="body">
+        {viewer}
+        <div className="state">Loading…</div>
+      </div>
+    )
+  }
 
   if (detail.missing) {
     return (
@@ -251,24 +305,10 @@ export function Detail({
   const filled = new Set(liveEntries.map((e) => migrateSection(e.section)))
   const sections = sectionsFor(target.entityKind)
 
-  // Only a set has combinations worth stepping through. A lone component still
-  // gets a picture, which is the greater part of the value.
-  const showViewer =
-    shell !== null && (entityKind === 'component' || entityKind === 'componentSet')
-
   return (
     <>
       <div className="body">
-        {showViewer && editing === null && (
-          <ComponentViewer
-            entityId={entityId}
-            name={name}
-            structure={shell!.structure}
-            initialVariantId={initialVariantId}
-            target={target}
-            onTargetChange={setTarget}
-          />
-        )}
+        {viewer}
         {editing === null && (
           <Drafts
             drafts={detail.log.filter((e) => e.draft && !e.deleted)}

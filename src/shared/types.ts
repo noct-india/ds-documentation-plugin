@@ -353,11 +353,39 @@ export interface HomeCounts {
   components: number | null
 }
 
+/**
+ * How many of each kind carry at least one approved note.
+ *
+ * Counted from the root index rather than by walking the file: the index
+ * already knows what has been written about, so this stays cheap even for
+ * components, whose total is still lazy because finding it means loading every
+ * page.
+ */
+export interface DocumentedCounts {
+  collections: number
+  variables: number
+  paintStyles: number
+  textStyles: number
+  effectStyles: number
+  components: number
+  /** Individual variants documented in their own right. */
+  variants: number
+}
+
 export interface HomeState {
   fileName: string
   counts: HomeCounts
+  documented: DocumentedCounts
   documentedCount: number
   projectNoteCount: number
+  /**
+   * Project-level sections that carry at least one note.
+   *
+   * Shown as a checklist rather than a number, because "3 notes" does not say
+   * whether anyone has written down how the product lays out — and that gap is
+   * invisible until an agent guesses at it.
+   */
+  projectSections: SectionKey[]
   /** Free prose about the product; feeds AI drafting and the export. */
   brief: string
   /** Entities in the index whose Figma object no longer resolves. */

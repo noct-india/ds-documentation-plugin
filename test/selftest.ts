@@ -14,6 +14,7 @@ import {
   editNote,
   findNotesMatching,
   insertUnderHeading,
+  countDocumented,
   liveNoteCount,
   readBody,
   readLog,
@@ -1207,6 +1208,72 @@ section('export: carries the writing, not what Figma Make already has')
   )
   check('an undocumented entity renders no warning block', bare.indexOf('⚠️') === -1)
   check('it is just the heading', bare.trim() === '# Untouched')
+}
+
+section('coverage: what counts as documented, and what quietly should not')
+
+{
+  const at = (kind: EntityKind, noteCount: number, alive = true) => ({
+    entry: { kind, name: 'x', noteCount, updatedAt: 0 },
+    alive,
+  })
+
+  const counts = countDocumented([
+    at('variable', 3),
+    at('variable', 1),
+    at('collection', 2),
+    at('paintStyle', 1),
+    at('textStyle', 1),
+    at('effectStyle', 1),
+    at('component', 1),
+    at('componentSet', 1),
+    at('variant', 1),
+  ])
+
+  check('variables are counted once each', counts.variables === 2)
+  check('a component and a component set share one bucket', counts.components === 2)
+  check('variants are counted apart from their set', counts.variants === 1)
+  check('each style kind lands in its own bucket', counts.paintStyles === 1 && counts.textStyles === 1 && counts.effectStyles === 1)
+  check('collections are their own bucket', counts.collections === 1)
+}
+
+{
+  const entry = (kind: EntityKind, noteCount: number, alive: boolean) => ({
+    entry: { kind, name: 'x', noteCount, updatedAt: 0 },
+    alive,
+  })
+
+  // An orphan is an entity whose Figma object was deleted. Its notes went with
+  // it, so counting it would report coverage the file no longer has.
+  const withOrphan = countDocumented([
+    entry('variable', 2, true),
+    entry('variable', 5, false),
+  ])
+  check('a deleted entity is not coverage', withOrphan.variables === 1)
+
+  // noteCount excludes drafts, so an entity whose only suggestions are
+  // unapproved reads as zero — an unreviewed guess must not inflate the number.
+  const draftsOnly = countDocumented([entry('component', 0, true)])
+  check('an entity holding only unapproved drafts is undocumented', draftsOnly.components === 0)
+
+  // Folders, pages and sections are documentable but have no denominator, so
+  // they are deliberately absent from the table rather than miscounted into it.
+  const containers = countDocumented([
+    entry('folder', 4, true),
+    entry('page', 4, true),
+    entry('section', 4, true),
+    entry('project', 9, true),
+  ])
+  const total = Object.values(containers).reduce((n, v) => n + v, 0)
+  check('containers and the project are not counted as coverage', total === 0)
+}
+
+{
+  // The project checklist is driven by this list, so "layout" being in it is
+  // what makes an undocumented layout visible rather than merely absent.
+  const projectSections = sectionsFor('project')
+  check('the project offers a layout section', projectSections.indexOf('layout' as SectionKey) !== -1)
+  check('every project section has a label for the chip', projectSections.every((k) => Boolean(SECTION_LABELS[k])))
 }
 
 // ─── Result ──────────────────────────────────────────────────────────────────

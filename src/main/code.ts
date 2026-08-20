@@ -22,6 +22,7 @@ import { buildBridgeRequest } from './bridge'
 import {
   appendDrafts,
   appendNote,
+  countDocumented,
   approveDrafts,
   clearBody,
   draftCount,
@@ -141,8 +142,20 @@ async function buildHome(): Promise<HomeState> {
       noteCount: entry.noteCount,
     }))
 
+  // Per-kind documented counts, from the same index the orphan scan just walked.
+  const documented = countDocumented(
+    entries.map(([, entry], i) => ({ entry, alive: alive[i] }))
+  )
+
+  const projectLog = readLog(figma.root).filter((e) => !e.deleted && !e.draft)
+  const projectSections = Array.from(
+    new Set(projectLog.map((e) => migrateSection(e.section)))
+  )
+
   return {
     fileName: figma.root.name,
+    documented,
+    projectSections,
     counts: {
       collections: snapshot.collections,
       variables: snapshot.variables,

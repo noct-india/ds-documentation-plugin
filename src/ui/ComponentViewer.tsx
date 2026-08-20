@@ -36,8 +36,20 @@ interface Props {
   entityId: string
   name: string
   structure: EntityStructure
-  /** Variant to open on, when one was selected on canvas. */
-  initialVariantId?: string
+  /**
+   * The chosen combination, and the overrides applied on top.
+   *
+   * Both are owned by the detail screen rather than held here. Switching the
+   * write target reloads the notes, which briefly unmounts this component — and
+   * state born inside it would be reseeded from the first variant every time,
+   * so picking "Tertiary" and then clicking the variant chip would snap back to
+   * "Primary". Lifting it gives it the lifetime it should have: it survives a
+   * target change and resets only when a different component is opened.
+   */
+  chosen: Record<string, string>
+  onChosenChange: (next: Record<string, string>) => void
+  overrides: Record<string, string | boolean>
+  onOverridesChange: (next: Record<string, string | boolean>) => void
   /** Which thing notes are currently written to. */
   target: WriteTarget
   onTargetChange: (target: WriteTarget) => void
@@ -67,7 +79,10 @@ export function ComponentViewer({
   entityId,
   name,
   structure,
-  initialVariantId,
+  chosen,
+  onChosenChange,
+  overrides,
+  onOverridesChange,
   target,
   onTargetChange,
 }: Props) {
@@ -76,14 +91,6 @@ export function ComponentViewer({
   const selectors = useMemo(() => variantProps(properties), [properties])
   const overridables = useMemo(() => overrideProps(properties), [properties])
 
-  // Start from the variant that was selected on canvas, else the first one —
-  // which for a set Figma lays out top-left-first is its default.
-  const opening = initialVariantId
-    ? variants.find((v) => v.id === initialVariantId)
-    : variants[0]
-
-  const [chosen, setChosen] = useState<Record<string, string>>(opening?.properties ?? {})
-  const [overrides, setOverrides] = useState<Record<string, string | boolean>>({})
   const [image, setImage] = useState<{ png: string; width: number; height: number } | null>(null)
   const [loading, setLoading] = useState(true)
   const [failed, setFailed] = useState(false)
@@ -159,7 +166,7 @@ export function ComponentViewer({
                 className="viewer-select"
                 value={chosen[property.displayName] ?? property.defaultValue}
                 onChange={(e) =>
-                  setChosen((prev) => ({ ...prev, [property.displayName]: e.target.value }))
+                  onChosenChange({ ...chosen, [property.displayName]: e.target.value })
                 }
               >
                 {property.options?.map((option) => (
@@ -184,7 +191,7 @@ export function ComponentViewer({
                       : property.defaultValue === 'true'
                   }
                   onChange={(e) =>
-                    setOverrides((prev) => ({ ...prev, [property.key]: e.target.checked }))
+                    onOverridesChange({ ...overrides, [property.key]: e.target.checked })
                   }
                 />
               </label>
@@ -197,14 +204,16 @@ export function ComponentViewer({
                   placeholder={property.defaultValue}
                   value={String(overrides[property.key] ?? '')}
                   onChange={(e) =>
-                    setOverrides((prev) => {
-                      const next = { ...prev }
-                      // Clearing the field returns to the default rather than
-                      // rendering the component with an empty string in it.
-                      if (e.target.value === '') delete next[property.key]
-                      else next[property.key] = e.target.value
-                      return next
-                    })
+                    onOverridesChange(
+                      (() => {
+                        const next = { ...overrides }
+                        // Clearing the field returns to the default rather than
+                        // rendering the component with an empty string in it.
+                        if (e.target.value === '') delete next[property.key]
+                        else next[property.key] = e.target.value
+                        return next
+                      })()
+                    )
                   }
                 />
               </label>
