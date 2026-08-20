@@ -1,58 +1,51 @@
-// Seeing what you are documenting.
+// Seeing what you are documenting, and saying what you mean by it.
 //
-// Figma gives no way to embed its own properties panel, so this draws one: the
-// controls come from `componentPropertyDefinitions` and picking a combination
-// re-renders the component. Variant properties select a different node and cost
-// nothing; booleans and text are instance overrides, and the sandbox handles
-// those by rendering through a throwaway instance — otherwise toggling "Icon"
-// would leave the picture unchanged, which is worse than not offering it.
+// Two jobs in one panel, deliberately. The dropdowns and switches choose which
+// variant is on screen. The checkbox beside each one says whether that property
+// is part of what the next note is *about* — tick Type and the note applies to
+// every primary; tick nothing and it applies to the whole component; tick them
+// all and it applies to exactly what you are looking at.
 //
-// Only what is on screen is ever rasterised, so a 176-variant set costs one
-// image rather than 176.
+// Figma gives no way to embed its own properties panel, so this draws one. Only
+// what is on screen is ever rasterised, so a 47-variant set costs one image.
 
 import { useEffect, useMemo, useState } from 'react'
-import type {
-  ComponentProperty,
-  EntityKind,
-  EntityStructure,
-} from '../shared/types'
+import type { ComponentProperty, EntityKind, EntityStructure } from '../shared/types'
 import { call } from './rpc'
-import { matchVariant, reconcile } from '../shared/variants'
+import {
+  describeScope,
+  matchVariant,
+  reconcile,
+  scopeReach,
+  type Scope,
+} from '../shared/variants'
 
 /**
  * What a note is written to.
  *
- * The viewer only ever points this at a component set or one of its variants,
- * but the type stays as wide as `EntityKind` because every screen carries a
- * target — a colour style is simply its own.
+ * For a component this is always the set itself; `scope` is what narrows it.
+ * There is no Figma object meaning "all primary buttons", so the scope travels
+ * with the note rather than being encoded in where it is stored.
  */
 export interface WriteTarget {
   entityId: string
   entityKind: EntityKind
   name: string
+  scope?: Scope
 }
 
 interface Props {
   entityId: string
   name: string
   structure: EntityStructure
-  /**
-   * The chosen combination, and the overrides applied on top.
-   *
-   * Both are owned by the detail screen rather than held here. Switching the
-   * write target reloads the notes, which briefly unmounts this component — and
-   * state born inside it would be reseeded from the first variant every time,
-   * so picking "Tertiary" and then clicking the variant chip would snap back to
-   * "Primary". Lifting it gives it the lifetime it should have: it survives a
-   * target change and resets only when a different component is opened.
-   */
+  /** The combination on screen, and any overrides applied on top of it. */
   chosen: Record<string, string>
   onChosenChange: (next: Record<string, string>) => void
   overrides: Record<string, string | boolean>
   onOverridesChange: (next: Record<string, string | boolean>) => void
-  /** Which thing notes are currently written to. */
-  target: WriteTarget
-  onTargetChange: (target: WriteTarget) => void
+  /** Which properties are part of what the next note is about. */
+  scoped: string[]
+  onScopedChange: (next: string[]) => void
 }
 
 /** Properties that choose a variant, as opposed to overriding one. */
@@ -73,21 +66,24 @@ export function ComponentViewer({
   onChosenChange,
   overrides,
   onOverridesChange,
-  target,
-  onTargetChange,
+  scoped,
+  onScopedChange,
 }: Props) {
   const properties = structure.properties ?? []
   const variants = structure.variants ?? []
   const selectors = useMemo(() => variantProps(properties), [properties])
   const overridables = useMemo(() => overrideProps(properties), [properties])
 
-  const [image, setImage] = useState<{ png: string; width: number; height: number } | null>(null)
+  const [image, setImage] = useState<{
+    png: string
+    width: number
+    height: number
+    unapplied?: string[]
+  } | null>(null)
   const [loading, setLoading] = useState(true)
   const [failed, setFailed] = useState(false)
 
   const current = variants.length > 0 ? matchVariant(variants, chosen) : undefined
-  // What actually gets rendered: the matching variant, or the component itself
-  // when there are no variants to choose between.
   const renderId = current?.id ?? entityId
   const dirty = Object.keys(overrides).length > 0
 
@@ -119,15 +115,48 @@ export function ComponentViewer({
     }
   }, [renderId, JSON.stringify(overrides)])
 
-  // Moving the picker while writing to a variant follows the picker, so the
-  // target label and the picture never disagree about which one you mean.
-  useEffect(() => {
-    if (target.entityKind !== 'variant' || !current) return
-    if (target.entityId === current.id) return
-    onTargetChange({ entityId: current.id, entityKind: 'variant', name: current.name })
-  }, [current?.id])
+  const toggleScope = (property: string) => {
+    onScopedChange(
+      scoped.indexOf(property) === -1
+        ? [...scoped, property]
+        : scoped.filter((p) => p !== property)
+    )
+  }
 
-  const onSet = target.entityKind !== 'variant'
+  // What the next note will be about, built from the ticked properties and the
+  // values currently on screen.
+  const scope: Scope = {}
+  for (const property of scoped) {
+    if (chosen[property] !== undefined) scope[property] = chosen[property]
+  }
+  const scopeSize = Object.keys(scope).length
+  const reach = scopeReach(variants, scope)
+  const everything = scopeSize === 0
+  const exact = scopeSize > 0 && scopeSize === selectors.length + overridables.length
+
+  const row = (property: ComponentProperty, control: React.ReactNode) => {
+    const on = scoped.indexOf(property.displayName) !== -1
+    return (
+      <div key={property.key} className={`prop-row${on ? ' scoped' : ''}`}>
+        <input
+          type="checkbox"
+          className="prop-check"
+          id={`scope-${property.key}`}
+          checked={on}
+          onChange={() => toggleScope(property.displayName)}
+          title={
+            on
+              ? `Notes will be about this ${property.displayName}`
+              : `Notes apply whatever ${property.displayName} is`
+          }
+        />
+        <label className="prop-name" htmlFor={`scope-${property.key}`}>
+          {property.displayName}
+        </label>
+        <div className="prop-control">{control}</div>
+      </div>
+    )
+  }
 
   return (
     <div className="viewer">
@@ -149,9 +178,9 @@ export function ComponentViewer({
         )}
 
         <div className="viewer-props">
-          {selectors.map((property) => (
-            <label key={property.key} className="viewer-prop">
-              <span className="viewer-prop-name">{property.displayName}</span>
+          {selectors.map((property) =>
+            row(
+              property,
               <select
                 className="viewer-select"
                 value={chosen[property.displayName] ?? property.defaultValue}
@@ -167,50 +196,56 @@ export function ComponentViewer({
                   </option>
                 ))}
               </select>
-            </label>
-          ))}
-
-          {overridables.map((property) =>
-            property.type === 'BOOLEAN' ? (
-              <label key={property.key} className="viewer-prop">
-                <span className="viewer-prop-name">{property.displayName}</span>
-                <input
-                  type="checkbox"
-                  className="viewer-toggle"
-                  checked={
-                    typeof overrides[property.key] === 'boolean'
-                      ? (overrides[property.key] as boolean)
-                      : property.defaultValue === 'true'
-                  }
-                  onChange={(e) =>
-                    onOverridesChange({ ...overrides, [property.key]: e.target.checked })
-                  }
-                />
-              </label>
-            ) : (
-              <label key={property.key} className="viewer-prop">
-                <span className="viewer-prop-name">{property.displayName}</span>
-                <input
-                  type="text"
-                  className="viewer-text"
-                  placeholder={property.defaultValue}
-                  value={String(overrides[property.key] ?? '')}
-                  onChange={(e) =>
-                    onOverridesChange(
-                      (() => {
-                        const next = { ...overrides }
-                        // Clearing the field returns to the default rather than
-                        // rendering the component with an empty string in it.
-                        if (e.target.value === '') delete next[property.key]
-                        else next[property.key] = e.target.value
-                        return next
-                      })()
-                    )
-                  }
-                />
-              </label>
             )
           )}
+
+          {overridables.map((property) => {
+            if (property.type === 'BOOLEAN') {
+              const value =
+                typeof overrides[property.key] === 'boolean'
+                  ? (overrides[property.key] as boolean)
+                  : property.defaultValue === 'true'
+              return row(
+                property,
+                <>
+                  {/* A switch, not a checkbox — the checkbox beside it already
+                      means something else entirely, and two of them in a row
+                      would be unreadable. */}
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={value}
+                    aria-label={property.displayName}
+                    className="viewer-switch"
+                    onClick={() => {
+                      onOverridesChange({ ...overrides, [property.key]: !value })
+                      onChosenChange({ ...chosen, [property.displayName]: !value ? 'On' : 'Off' })
+                    }}
+                  >
+                    <span className="viewer-switch-knob" />
+                  </button>
+                  <span className="viewer-switch-value">{value ? 'On' : 'Off'}</span>
+                </>
+              )
+            }
+            return row(
+              property,
+              <input
+                type="text"
+                className="viewer-text"
+                placeholder={property.defaultValue}
+                value={String(overrides[property.key] ?? '')}
+                onChange={(e) => {
+                  const next = { ...overrides }
+                  // Clearing the field returns to the default rather than
+                  // rendering the component with an empty string in it.
+                  if (e.target.value === '') delete next[property.key]
+                  else next[property.key] = e.target.value
+                  onOverridesChange(next)
+                }}
+              />
+            )
+          })}
 
           {selectors.length === 0 && overridables.length === 0 && (
             <div className="viewer-noprops">No properties</div>
@@ -222,46 +257,35 @@ export function ComponentViewer({
         </div>
       </div>
 
-      {/* Which thing a note is written to. Always visible, never inferred — a
-          picker that quietly redirected writes would be the ideal way to file
-          notes against the wrong element.
-
-          Shown whenever the set has variants at all, not only when the current
-          combination resolves to one. Hiding the row took the way back to
-          set-level with it, so landing on a combination nobody drew left you
-          stuck. `reconcile` should now prevent that, and this is the guarantee
-          that a future gap in it cannot strand anyone. */}
-      {variants.length > 0 && (
-        <div className="viewer-target">
-          <span className="viewer-target-label">Writing about</span>
-          <button
-            className={`viewer-target-opt${onSet ? ' on' : ''}`}
-            onClick={() =>
-              onTargetChange({ entityId, entityKind: 'componentSet', name })
-            }
-          >
-            {name}, all variants
-          </button>
-          {current ? (
-            <button
-              className={`viewer-target-opt${onSet ? '' : ' on'}`}
-              onClick={() =>
-                onTargetChange({ entityId: current.id, entityKind: 'variant', name: current.name })
-              }
-              title={`Write a note about only ${current.name}`}
-            >
-              This one · {current.name}
-            </button>
-          ) : (
-            <span
-              className="viewer-target-opt off"
-              title="No variant in this set has that combination, so there is nothing to write a note about."
-            >
-              This combination doesn't exist
-            </span>
-          )}
+      {/* A property the component would not accept. Said out loud, because a
+          toggle that changes nothing and explains nothing reads as broken. */}
+      {image?.unapplied && (
+        <div className="viewer-warn">
+          {image.unapplied.join(', ')} could not be applied to this variant — the preview
+          shows it unchanged.
         </div>
       )}
+
+      {/* What the next note is about. Never inferred: this is the control that
+          decides where what you type ends up. */}
+      <div className="viewer-scope">
+        <span className="viewer-scope-label">Writing about</span>
+        <span className="viewer-scope-value">
+          {everything ? `${name} — every variant` : describeScope(scope)}
+        </span>
+        <span className="viewer-scope-reach">
+          {everything
+            ? `all ${variants.length || ''} variants`.trim()
+            : exact
+              ? 'this exact variant'
+              : `${reach} of ${variants.length} variants`}
+        </span>
+        {scopeSize > 0 && (
+          <button className="viewer-scope-clear" onClick={() => onScopedChange([])}>
+            clear
+          </button>
+        )}
+      </div>
     </div>
   )
 }

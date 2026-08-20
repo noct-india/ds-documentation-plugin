@@ -188,10 +188,21 @@ export function appendNote(
   name: string,
   text: string,
   section: SectionKey,
-  author: string
+  author: string,
+  scope?: Record<string, string>
 ): NoteEntry[] {
   const log = readLog(host)
-  log.push({ id: `${Date.now()}-${counter++}`, ts: Date.now(), author, text, section })
+  const entry: NoteEntry = {
+    id: `${Date.now()}-${counter++}`,
+    ts: Date.now(),
+    author,
+    text,
+    section,
+  }
+  // Stored only when it narrows something. An empty object would read as a
+  // scope in every later comparison, when what it means is "no scope at all".
+  if (scope && Object.keys(scope).length > 0) entry.scope = scope
+  log.push(entry)
   persistLog(host, kind, name, log)
   return log
 }

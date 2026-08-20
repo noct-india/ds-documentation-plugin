@@ -12,6 +12,7 @@ import type {
   SectionKey,
 } from '../../shared/types'
 import { SECTION_HEADINGS, migrateSection, sectionsFor } from '../../shared/types'
+import { describeScope, scopeDepth, scopeKey } from '../../shared/variants'
 
 export interface RenderOptions {
   /**
@@ -286,6 +287,39 @@ export function renderAuthoredSections(
   kind: EntityKind = 'project',
   level = 2
 ): string {
+  // Unscoped notes first: they are what is true of the component however it is
+  // configured, and an agent should read them before the narrowing conditions.
+  const blocks: string[] = [renderSections(log.filter((e) => scopeDepth(e.scope) === 0), kind, level)]
+
+  for (const [, group] of groupByScope(log)) {
+    // "When Type = Primary" rather than a bare property list — the note under
+    // it is a rule that holds only in that case, and the heading has to say so.
+    blocks.push(heading(level, `When ${describeScope(group.scope)}`))
+    blocks.push(renderSections(group.entries, kind, level + 1))
+  }
+
+  return blocks.filter(Boolean).join('\n\n')
+}
+
+/** Notes grouped by the combination they are about, general first. */
+function groupByScope(
+  log: NoteEntry[]
+): Array<[string, { scope: Record<string, string>; entries: NoteEntry[] }]> {
+  const groups = new Map<string, { scope: Record<string, string>; entries: NoteEntry[] }>()
+  for (const entry of log) {
+    if (scopeDepth(entry.scope) === 0) continue
+    const key = scopeKey(entry.scope)
+    const existing = groups.get(key)
+    if (existing) existing.entries.push(entry)
+    else groups.set(key, { scope: entry.scope!, entries: [entry] })
+  }
+  return [...groups.entries()].sort(
+    (a, b) => scopeDepth(a[1].scope) - scopeDepth(b[1].scope)
+  )
+}
+
+/** One scope's notes, under their category headings. */
+function renderSections(log: NoteEntry[], kind: EntityKind, level: number): string {
   const groups = groupBySection(log)
   const blocks: string[] = []
   for (const key of orderedSections(kind, groups)) {

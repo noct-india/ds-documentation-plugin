@@ -173,6 +173,19 @@ export interface NoteEntry {
   author: string
   text: string
   section: SectionKey
+  /**
+   * The property combination this note is about.
+   *
+   * Absent or empty means the whole component. `{ Type: 'Primary' }` means
+   * every primary, whatever its size or state. Every property pinned means one
+   * exact variant. The two things the plugin used to offer are the two ends of
+   * this, so there is one mechanism rather than a special case at each end.
+   *
+   * Boolean and text properties may appear here even though they never select a
+   * variant — "when Show Icon is on" is a perfectly ordinary thing to have a
+   * rule about.
+   */
+  scope?: Record<string, string>
   deleted?: boolean
   /**
    * Awaiting review.
@@ -531,6 +544,8 @@ export type Request =
       entityId: string
       entityKind: EntityKind
       entries: Array<{ text: string; section: SectionKey }>
+      /** Which combination the notes are about; omitted for the whole entity. */
+      scope?: Record<string, string>
     }
   | { type: 'editNote'; entityId: string; entityKind: EntityKind; noteId: string; text: string }
   | { type: 'getSharedNotes'; targets: Array<{ entityId: string; entityKind: EntityKind }> }
@@ -639,7 +654,7 @@ export interface ResponseMap {
   resize: null
   rememberBridgeHome: null
   getBridgeHome: string | null
-  getComponentImage: { png: string; width: number; height: number } | null
+  getComponentImage: { png: string; width: number; height: number; unapplied?: string[] } | null
 }
 
 /** UI → sandbox. */

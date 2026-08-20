@@ -1675,3 +1675,137 @@ button {
   color: var(--text-faint);
   cursor: default;
 }
+
+/* ─── Scope: which properties a note is about ────────────────────────────── */
+
+.prop-row {
+  display: grid;
+  grid-template-columns: 16px 84px 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px 4px 3px;
+  border-radius: 4px;
+  border-left: 2px solid transparent;
+}
+
+/* A ticked property is part of what the note is about. Worth showing on the
+   row, not just in the box — this is the control that decides where a note
+   lands, and it should be readable at a glance. */
+.prop-row.scoped {
+  background: rgb(124 196 255 / 0.10);
+  border-left-color: var(--accent);
+}
+
+.prop-check {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.prop-row .prop-name {
+  font-size: 11px;
+  color: var(--text-faint);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prop-row.scoped .prop-name { color: var(--text); }
+
+.prop-control { display: flex; align-items: center; gap: 8px; min-width: 0; }
+
+/* A switch, not a checkbox: the checkbox on the same row already means
+   something else, and two in a row would be unreadable. */
+.viewer-switch {
+  position: relative;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: 99px;
+  background: var(--border-strong);
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+
+.viewer-switch[aria-checked='true'] { background: var(--accent); }
+
+.viewer-switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 140ms ease;
+}
+
+.viewer-switch[aria-checked='true'] .viewer-switch-knob { transform: translateX(12px); }
+
+.viewer-switch-value { font-size: 10px; color: var(--text-faint); min-width: 20px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .viewer-switch, .viewer-switch-knob { transition: none; }
+}
+
+.viewer-warn {
+  padding: 7px 12px;
+  border-top: 1px solid var(--border);
+  background: rgb(255 180 84 / 0.10);
+  font-size: 10px;
+  color: var(--warn);
+}
+
+.viewer-scope {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 9px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-raised);
+}
+
+.viewer-scope-label {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.viewer-scope-value { font-size: 11px; font-weight: 600; color: var(--text); }
+.viewer-scope-reach { font-size: 10px; color: var(--accent); }
+
+.viewer-scope-clear {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--text-faint);
+  padding: 0;
+}
+
+.viewer-scope-clear:hover { color: var(--text); }
+
+/* A note's own scope, in the list below. */
+.entry-scope {
+  display: inline-block;
+  margin-bottom: 3px;
+  padding: 1px 7px;
+  border: 1px solid var(--border-strong);
+  border-radius: 99px;
+  font-size: 9px;
+  color: var(--text-faint);
+}
+
+.entry-scope.reaches {
+  border-color: transparent;
+  background: rgb(124 196 255 / 0.14);
+  color: var(--text-dim);
+}
+
+/* Written about a different combination — still listed, just not in force. */
+.entry.distant .entry-text { color: var(--text-dim); }

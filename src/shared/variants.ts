@@ -57,3 +57,54 @@ export function reconcile(
   }
   return best.properties
 }
+
+// ─── Scope ───────────────────────────────────────────────────────────────────
+
+/**
+ * The property combination a note is about.
+ *
+ * Empty means the whole component. One key means every variant carrying that
+ * value. Every key means one exact variant. The plugin used to offer only the
+ * two ends of that as separate mechanisms; this is the whole spectrum, and the
+ * ends fall out of it rather than being special-cased.
+ */
+export type Scope = Record<string, string>
+
+/** Does this note reach the combination currently on screen? */
+export function scopeApplies(scope: Scope | undefined, chosen: Record<string, string>): boolean {
+  if (!scope) return true
+  return Object.keys(scope).every((key) => chosen[key] === scope[key])
+}
+
+/** How specific a scope is — used to read general rules before narrow ones. */
+export function scopeDepth(scope: Scope | undefined): number {
+  return scope ? Object.keys(scope).length : 0
+}
+
+/** "Type = Primary, Size = Large", or a plain description of the whole thing. */
+export function describeScope(scope: Scope | undefined, whole = 'every variant'): string {
+  const keys = scope ? Object.keys(scope) : []
+  if (keys.length === 0) return whole
+  return keys.map((key) => key + ' = ' + (scope as Scope)[key]).join(', ')
+}
+
+/**
+ * How many variants a scope reaches.
+ *
+ * Boolean and text properties are not variant axes, so they narrow nothing
+ * here — "Show Icon = On" is a real scope for a note but every variant can
+ * still be in it.
+ */
+export function scopeReach(variants: VariantRef[], scope: Scope): number {
+  const axes = Object.keys(scope).filter((key) =>
+    variants.some((v) => v.properties[key] !== undefined)
+  )
+  if (axes.length === 0) return variants.length
+  return variants.filter((v) => axes.every((key) => v.properties[key] === scope[key])).length
+}
+
+/** Stable identity for grouping notes that share a scope. */
+export function scopeKey(scope: Scope | undefined): string {
+  const keys = scope ? Object.keys(scope).sort() : []
+  return keys.map((key) => key + '=' + (scope as Scope)[key]).join('\u0000')
+}

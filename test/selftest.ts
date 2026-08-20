@@ -23,7 +23,15 @@ import {
   type PluginDataHost,
 } from '../src/main/storage'
 import { buildTree, flattenLeaves, folderAt, renderTreeOutline } from '../src/shared/tree'
-import { matchVariant, reconcile } from '../src/shared/variants'
+import {
+  describeScope,
+  matchVariant,
+  reconcile,
+  scopeApplies,
+  scopeDepth,
+  scopeKey,
+  scopeReach,
+} from '../src/shared/variants'
 import { componentDir, slug, uniqueSlugger } from '../src/shared/slug'
 import { isDocumented, renderAuthoredSections, renderEntityDoc } from '../src/main/export/render'
 import { classify, classifySegments, splitIntoSentences } from '../src/shared/classify'
@@ -1321,6 +1329,83 @@ section('variants: a sparse set never strands the picker')
   const impossible = reconcile(variants, start, 'Type', 'Ghost')
   check('an unavailable value is left as chosen', impossible.Type === 'Ghost')
   check('and is reported as having no variant', matchVariant(variants, impossible) === undefined)
+}
+
+section('scope: a note says which combination it is about')
+
+{
+  const variants = [
+    { id: '1', name: 'a', properties: { Type: 'Primary', Size: 'Large' } },
+    { id: '2', name: 'b', properties: { Type: 'Primary', Size: 'Small' } },
+    { id: '3', name: 'c', properties: { Type: 'Tertiary', Size: 'Large' } },
+  ]
+
+  check('no scope reaches everything', scopeApplies(undefined, { Type: 'Tertiary' }))
+  check('an empty scope reaches everything', scopeApplies({}, { Type: 'Tertiary' }))
+  check('a matching scope reaches', scopeApplies({ Type: 'Primary' }, { Type: 'Primary', Size: 'Small' }))
+  check(
+    'a scope naming another value does not',
+    !scopeApplies({ Type: 'Primary' }, { Type: 'Tertiary', Size: 'Large' })
+  )
+  check(
+    'every named property has to match, not just one',
+    !scopeApplies({ Type: 'Primary', Size: 'Large' }, { Type: 'Primary', Size: 'Small' })
+  )
+
+  check('reach counts the variants a scope covers', scopeReach(variants, { Type: 'Primary' }) === 2)
+  check('a narrower scope reaches fewer', scopeReach(variants, { Type: 'Primary', Size: 'Large' }) === 1)
+  check('an empty scope reaches all of them', scopeReach(variants, {}) === 3)
+
+  // A boolean is a real scope for a note but is not a variant axis, so it must
+  // not silently report zero variants and read as covering nothing.
+  check('a non-variant property narrows no variants', scopeReach(variants, { 'Show Icon': 'On' }) === 3)
+
+  check('depth orders general before narrow', scopeDepth({}) < scopeDepth({ Type: 'Primary' }))
+  check('and narrow before exact', scopeDepth({ Type: 'Primary' }) < scopeDepth({ Type: 'Primary', Size: 'Large' }))
+
+  check('a scope reads as a condition', describeScope({ Type: 'Primary', Size: 'Large' }) === 'Type = Primary, Size = Large')
+  check('and an empty one says so', describeScope(undefined) === 'every variant')
+
+  // Grouping in the export depends on two notes about the same combination
+  // landing under one heading however the object was built.
+  check(
+    'the same scope keys the same either way round',
+    scopeKey({ Type: 'Primary', Size: 'Large' }) === scopeKey({ Size: 'Large', Type: 'Primary' })
+  )
+  check(
+    'different scopes key differently',
+    scopeKey({ Type: 'Primary' }) !== scopeKey({ Type: 'Tertiary' })
+  )
+}
+
+{
+  const host = new FakeHost()
+  appendNote(host, 'componentSet', 'Button', 'Every action is a Button.', 'purpose', 'A')
+  appendNote(host, 'componentSet', 'Button', 'Only one per section.', 'rules', 'A', { Type: 'Primary' })
+  appendNote(host, 'componentSet', 'Button', 'Reserved for the page CTA.', 'rules', 'A', {
+    Type: 'Primary',
+    Size: 'Large',
+  })
+
+  const log = readLog(host)
+  check('all three live on the component', log.length === 3)
+  check('an unscoped note stores no scope at all', log[0].scope === undefined)
+  check('a scoped one keeps its combination', log[1].scope?.Type === 'Primary')
+
+  // An empty object would compare as a scope in every later check, when what it
+  // means is "no scope" — so it must not be stored.
+  const empty = new FakeHost()
+  appendNote(empty, 'componentSet', 'Button', 'x', 'rules', 'A', {})
+  check('an empty scope is not stored as one', readLog(empty)[0].scope === undefined)
+
+  const md = renderAuthoredSections(log, 'componentSet', 2)
+  check('the general rule leads', md.indexOf('Every action is a Button.') < md.indexOf('Only one per section.'))
+  check('a scope becomes a condition heading', md.indexOf('## When Type = Primary') !== -1)
+  check('the narrower one gets its own', md.indexOf('## When Type = Primary, Size = Large') !== -1)
+  check(
+    'and general conditions come before narrow ones',
+    md.indexOf('## When Type = Primary\n') < md.indexOf('## When Type = Primary, Size = Large')
+  )
 }
 
 // ─── Result ──────────────────────────────────────────────────────────────────

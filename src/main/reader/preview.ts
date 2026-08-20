@@ -15,6 +15,14 @@ export interface RenderedImage {
   png: string
   width: number
   height: number
+  /**
+   * Properties the component would not accept, by display name.
+   *
+   * Surfaced so a toggle that cannot take effect says so, rather than looking
+   * broken. Usually means the property is exposed on the set but lives on a
+   * layer this render could not reach.
+   */
+  unapplied?: string[]
 }
 
 /** Sent to the bridge: enough to read a control, not a screenshot. */
@@ -81,6 +89,64 @@ async function rasterise(node: SceneNode, maxPx: number): Promise<RenderedImage 
   }
 }
 
+/** The half of a property key before its `#0:0` suffix. */
+function displayName(key: string): string {
+  return key.split('#')[0]
+}
+
+/**
+ * Applies component properties, following them down to wherever they live.
+ *
+ * A variant is very often a thin wrapper around an instance of a master
+ * component, with the layers a boolean controls sitting inside that master.
+ * The property is surfaced on the set, so the plugin offers it — but
+ * `setProperties` on the outer instance rejects it, because it belongs to the
+ * nested one. That threw, the whole render was abandoned, and the toggle looked
+ * inert.
+ *
+ * So each property is applied on its own — one unknown key must not sink the
+ * others — and anything the outer instance refuses is looked for by name among
+ * the instances beneath it. Whatever still finds no home is reported rather
+ * than silently ignored, because a control that does nothing and says nothing
+ * is worse than one that admits it.
+ */
+function applyProperties(instance: InstanceNode, overrides: Overrides): string[] {
+  const pending = new Map(Object.entries(overrides))
+
+  const attempt = (target: InstanceNode, key: string, value: string | boolean): boolean => {
+    try {
+      target.setProperties({ [key]: value })
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  for (const [key, value] of [...pending]) {
+    if (attempt(instance, key, value)) pending.delete(key)
+  }
+  if (pending.size === 0) return []
+
+  // Matched on the visible name: the nested instance carries its own suffix, so
+  // the outer key will never equal it.
+  const nested = instance.findAllWithCriteria({ types: ['INSTANCE'] })
+  for (const child of nested) {
+    if (pending.size === 0) break
+    let definitions: Record<string, unknown>
+    try {
+      definitions = child.componentProperties as unknown as Record<string, unknown>
+    } catch {
+      continue
+    }
+    for (const [key, value] of [...pending]) {
+      const match = Object.keys(definitions).find((k) => displayName(k) === displayName(key))
+      if (match && attempt(child, match, value)) pending.delete(key)
+    }
+  }
+
+  return [...pending.keys()].map(displayName)
+}
+
 /**
  * Render with properties applied, via a throwaway instance.
  *
@@ -99,8 +165,9 @@ async function rasteriseWithOverrides(
     instance = component.createInstance()
     instance.x = -100_000
     instance.y = -100_000
-    instance.setProperties(overrides)
-    return await rasterise(instance, maxPx)
+    const unapplied = applyProperties(instance, overrides)
+    const image = await rasterise(instance, maxPx)
+    return image ? { ...image, unapplied: unapplied.length > 0 ? unapplied : undefined } : null
   } catch (err) {
     console.error('[dsdoc] could not render with overrides', err)
     return null

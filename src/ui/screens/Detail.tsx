@@ -11,6 +11,7 @@ import { SECTION_LABELS, migrateSection, sectionsFor } from '../../shared/types'
 import { call } from '../rpc'
 import { Composer, type ComposerEntry, type SendMode } from '../Composer'
 import { ComponentViewer, type WriteTarget } from '../ComponentViewer'
+import { describeScope, scopeApplies, scopeDepth } from '../../shared/variants'
 import { Drafts } from '../Drafts'
 import { Swatch } from '../Swatch'
 import { Target } from '../icons'
@@ -90,6 +91,14 @@ export function Detail({
    */
   const [chosen, setChosen] = useState<Record<string, string>>({})
   const [overrides, setOverrides] = useState<Record<string, string | boolean>>({})
+  /**
+   * Which properties the next note is about.
+   *
+   * Empty means the whole component, which is the default and the common case.
+   * Nothing is ever added here without a click, because this is what decides
+   * where a note lands.
+   */
+  const [scoped, setScoped] = useState<string[]>([])
 
   // A new entity is a fresh start: the target must never survive navigation, or
   // the next component would open still pointed at the last one's variant.
@@ -98,11 +107,12 @@ export function Detail({
     setShell(null)
     setChosen({})
     setOverrides({})
+    setScoped([])
   }, [entityId, entityKind])
 
   // Seed the picker once the component's variants are known — the one selected
   // on canvas, else the first, which for a set Figma lays out top-left-first is
-  // its default. Guarded on being unset so a target change never reseeds it.
+  // its default. Guarded on being unset so nothing later reseeds it.
   useEffect(() => {
     const variants = shell?.structure.variants
     if (!variants || variants.length === 0) return
@@ -113,26 +123,13 @@ export function Detail({
     if (opening) setChosen(opening.properties)
   }, [shell])
 
-  useEffect(() => {
-    let cancelled = false
-    setDetail(null)
-    setRefiling(null)
-    setEditing(null)
-    call({ type: 'getEntity', entityId: target.entityId, entityKind: target.entityKind })
-      .then((d) => {
-        if (cancelled) return
-        setDetail(d)
-        // Same fetch serves both while the target is still the opened entity,
-        // which it always is on first load — so the viewer costs no extra call.
-        if (d.entityId === entityId) setShell(d)
-      })
-      .catch((err: Error) => {
-        if (!cancelled) onError(err.message)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [target.entityId, target.entityKind])
+  // The scope the composer will stamp on a note: the ticked properties, at the
+  // values currently on screen.
+  const scope: Record<string, string> = {}
+  for (const property of scoped) {
+    if (chosen[property] !== undefined) scope[property] = chosen[property]
+  }
+  const scoping = Object.keys(scope).length > 0
 
   // Every write goes to the target, never to the opened entity. One place to
   // read, so a new call site cannot quietly write to the wrong thing.
@@ -146,7 +143,12 @@ export function Detail({
     }
 
     try {
-      const updated = await call({ type: 'addNotes', ...writeTo, entries })
+      const updated = await call({
+        type: 'addNotes',
+        ...writeTo,
+        entries,
+        scope: scoping ? scope : undefined,
+      })
       setDetail(updated)
       requestAnimationFrame(() => docRef.current?.scrollIntoView({ block: 'end' }))
       onSaved()
@@ -265,8 +267,8 @@ export function Detail({
         onChosenChange={setChosen}
         overrides={overrides}
         onOverridesChange={setOverrides}
-        target={target}
-        onTargetChange={setTarget}
+        scoped={scoped}
+        onScopedChange={setScoped}
       />
     ) : null
 
@@ -387,11 +389,33 @@ export function Detail({
               {liveEntries.length === 1 ? '' : 's'} — original wording
             </button>
             {showHistory &&
-              detail.log.map((entry) => {
+              [...detail.log]
+                // General rules before narrow ones, which is the order they
+                // apply in and the order someone would explain them.
+                .sort((a, b) => scopeDepth(a.scope) - scopeDepth(b.scope))
+                .map((entry) => {
                 const section = migrateSection(entry.section)
+                // Dimmed when it does not reach the combination on screen —
+                // still listed, because it is still a note about this component.
+                const reaches = scopeApplies(entry.scope, chosen)
                 return (
-                  <div key={entry.id} className={`entry${entry.deleted ? ' gone' : ''}`}>
+                  <div
+                    key={entry.id}
+                    className={`entry${entry.deleted ? ' gone' : ''}${reaches ? '' : ' distant'}`}
+                  >
                     <div className="entry-main">
+                      {entry.scope && (
+                        <span
+                          className={`entry-scope${reaches ? ' reaches' : ''}`}
+                          title={
+                            reaches
+                              ? 'Applies to the variant on screen'
+                              : 'Written about a different combination'
+                          }
+                        >
+                          {describeScope(entry.scope)}
+                        </span>
+                      )}
                       {editingNote?.id === entry.id ? (
                         <>
                           <textarea
@@ -513,9 +537,7 @@ export function Detail({
         onSubmit={submit}
         // Says what it will write to. Only when that is not the thing you
         // opened — otherwise it is stating the obvious in every other screen.
-        placeholder={
-          target.entityKind === 'variant' ? `Note about ${target.name} only…` : undefined
-        }
+        placeholder={scoping ? `Note about ${describeScope(scope)}…` : undefined}
         trailing={
           canReveal ? (
             <button

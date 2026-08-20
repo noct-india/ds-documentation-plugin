@@ -184,12 +184,13 @@ function applyNotes(
   entityId: string,
   entityKind: EntityKind,
   name: string,
-  entries: Array<{ text: string; section: SectionKey }>
+  entries: Array<{ text: string; section: SectionKey }>,
+  scope?: Record<string, string>
 ): void {
   const author = currentAuthor()
   let log = readLog(host)
   for (const entry of entries) {
-    log = appendNote(host, entityKind, name, entry.text, entry.section, author)
+    log = appendNote(host, entityKind, name, entry.text, entry.section, author, scope)
   }
   updateIndex(entityId, entityKind, name, liveNoteCount(log))
 
@@ -315,7 +316,14 @@ async function handle(request: Request): Promise<unknown> {
       const resolved = await resolveEntity(request.entityId, request.entityKind)
       if (!resolved) throw new Error('That item no longer exists in this file.')
 
-      applyNotes(resolved.host, request.entityId, request.entityKind, resolved.name, request.entries)
+      applyNotes(
+        resolved.host,
+        request.entityId,
+        request.entityKind,
+        resolved.name,
+        request.entries,
+        request.scope
+      )
 
       const detail = await buildDetail(request.entityId, request.entityKind)
       writeDoc(resolved.host, detail.markdown)
