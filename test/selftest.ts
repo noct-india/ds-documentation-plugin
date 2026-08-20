@@ -16,6 +16,7 @@ import {
   insertUnderHeading,
   countDocumented,
   liveNoteCount,
+  planVariantMigration,
   readBody,
   readLog,
   softDeleteNote,
@@ -1406,6 +1407,68 @@ section('scope: a note says which combination it is about')
     'and general conditions come before narrow ones',
     md.indexOf('## When Type = Primary\n') < md.indexOf('## When Type = Primary, Size = Large')
   )
+}
+
+section('migration: per-variant notes become scoped notes on the set')
+
+{
+  const note = (id: string, text: string, ts: number, extra: Partial<NoteEntry> = {}) =>
+    ({ id, ts, author: 'A', text, section: 'rules' as SectionKey, ...extra }) as NoteEntry
+
+  const setLog = [note('s1', 'Only one per section.', 100)]
+  const variantLog = [note('v1', 'The 28px size drops its label.', 200)]
+  const scope = { Type: 'Primary', State: 'Default', Size: 'Small' }
+
+  const plan = planVariantMigration(setLog, variantLog, scope)
+
+  check('the note moves', plan.moved === 1)
+  check('nothing already on the set is lost', plan.merged.some((e) => e.id === 's1'))
+  check('and the moved one arrives', plan.merged.some((e) => e.id === 'v1'))
+
+  const moved = plan.merged.find((e) => e.id === 'v1')!
+  check('its wording is untouched', moved.text === 'The 28px size drops its label.')
+  check('its id survives, so a rerun can recognise it', moved.id === 'v1')
+  check('it now says which combination it was about', moved.scope?.Size === 'Small')
+  check('every axis is pinned — it was about one variant', Object.keys(moved.scope ?? {}).length === 3)
+  check('order stays chronological', plan.merged.map((e) => e.id).join(',') === 's1,v1')
+}
+
+{
+  const note = (id: string, ts: number, extra: Partial<NoteEntry> = {}) =>
+    ({ id, ts, author: 'A', text: 't', section: 'rules' as SectionKey, ...extra }) as NoteEntry
+
+  // Running twice must not double the note. The guard is the id, because two
+  // variants can legitimately carry identical wording.
+  const already = [note('v1', 200, { scope: { Type: 'Primary' } })]
+  const again = planVariantMigration(already, [note('v1', 200)], { Type: 'Primary' })
+  check('a second run moves nothing', again.moved === 0)
+  check('and does not duplicate the entry', again.merged.filter((e) => e.id === 'v1').length === 1)
+
+  // Deleted and draft state has to survive, or a hidden note reappears in the
+  // export and an unreviewed suggestion becomes a rule.
+  const carried = planVariantMigration(
+    [],
+    [note('d1', 1, { deleted: true }), note('d2', 2, { draft: true })],
+    { Type: 'Primary' }
+  )
+  check('a hidden note stays hidden', carried.merged.find((e) => e.id === 'd1')?.deleted === true)
+  check('an unapproved draft stays a draft', carried.merged.find((e) => e.id === 'd2')?.draft === true)
+
+  // Earlier wordings are the never-lose guarantee; they travel too.
+  const withHistory = planVariantMigration(
+    [],
+    [note('r1', 1, { revisions: [{ text: 'first try', ts: 0, author: 'A' }] })],
+    { Type: 'Primary' }
+  )
+  check(
+    'previous wordings travel with it',
+    withHistory.merged[0].revisions?.[0].text === 'first try'
+  )
+
+  // A variant with no properties to speak of should not gain an empty scope,
+  // which would read as a real scope everywhere downstream.
+  const noScope = planVariantMigration([], [note('n1', 1)], {})
+  check('an empty combination produces no scope', noScope.merged[0].scope === undefined)
 }
 
 // ─── Result ──────────────────────────────────────────────────────────────────

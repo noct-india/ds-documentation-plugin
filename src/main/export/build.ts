@@ -10,8 +10,13 @@
 
 import type { ExportFile, NoteEntry } from '../../shared/types'
 import { componentDir, uniqueSlugger } from '../../shared/slug'
-import { liveNoteCount, readIndex, readLog } from '../storage'
-import { allComponents, componentStructure, UNGROUPED_NAME } from '../reader/components'
+import { liveNoteCount, readLog } from '../storage'
+import {
+  allComponents,
+  componentStructure,
+  migrateVariantNotes,
+  UNGROUPED_NAME,
+} from '../reader/components'
 import { getStyles, styleStructure, type StyleKind } from '../reader/styles'
 import { collectionStructure, getCollections, variablesIn, variableStructure } from '../reader/variables'
 import { isDocumented, renderAuthoredSections, renderEntityDoc, renderStructure } from './render'
@@ -38,37 +43,6 @@ function renderForExport(
   }
   const structureMd = renderStructure(name, kind, structure, level)
   return `${structureMd}\n\n${override.trim()}\n`
-}
-
-/**
- * Notes written about single variants, appended to their component's file.
- *
- * The root index is consulted rather than reading plugin data off every child:
- * a file with fifty 176-variant sets would otherwise mean nine thousand reads
- * to find the handful of variants anyone actually annotated.
- *
- * Returns "" for the overwhelmingly common case of a set nobody documented at
- * variant level, so ordinary component files are untouched.
- */
-function renderVariantNotes(component: ComponentNode | ComponentSetNode): string {
-  if (component.type !== 'COMPONENT_SET') return ''
-
-  const index = readIndex()
-  const documented = component.children.filter(
-    (child) => child.type === 'COMPONENT' && (index[child.id]?.noteCount ?? 0) > 0
-  )
-  if (documented.length === 0) return ''
-
-  const blocks: string[] = ['\n## Specific variants\n']
-  for (const variant of documented) {
-    const log = readLog(variant as ComponentNode)
-    const body = renderAuthoredSections(log, 'variant', 4)
-    if (!body.trim()) continue
-    blocks.push(`### ${variant.name}\n\n${body.trim()}\n`)
-  }
-
-  // Every candidate could still render empty — drafts do not export.
-  return blocks.length > 1 ? blocks.join('\n') : ''
 }
 
 type Progress = (message: string) => void
@@ -206,8 +180,11 @@ export async function buildExport(progress: Progress): Promise<ExportFile[]> {
   const sluggers = new Map<string, (name: string) => string>()
 
   for (const { page, section, component } of found) {
+    // A file may never have had this component opened in the plugin, so the
+    // export is the other place the migration has to happen — otherwise notes
+    // written under the old per-variant model would silently miss the ZIP.
+    migrateVariantNotes(component)
     const log = readLog(component)
-    const variantNotes = renderVariantNotes(component)
 
     // A component nobody has written about gets no file. Its name, properties
     // and variants are already in the library Make imported; a file restating
@@ -217,7 +194,7 @@ export async function buildExport(progress: Progress): Promise<ExportFile[]> {
     // warning — was meant to distinguish "no rule" from "no constraint". With
     // 200+ components that inverted: the warnings were the export, and the
     // rules were buried in them. Absence says the same thing more quietly.
-    if (!isDocumented(log) && !variantNotes) continue
+    if (!isDocumented(log)) continue
 
     // Mirror how the designer arranged the file: page, then section.
     const dir = componentDir(page, section === UNGROUPED_NAME ? null : section)
@@ -239,7 +216,7 @@ export async function buildExport(progress: Progress): Promise<ExportFile[]> {
     // Variants do not get files of their own — individual components do, and a
     // variant is a state of one, not another component. Anything documented
     // about a single combination lands inside its component's file.
-    files.push({ path: `guidelines/${file}`, content: content + variantNotes })
+    files.push({ path: `guidelines/${file}`, content })
     manifest.components.push({
       name: component.name,
       file,

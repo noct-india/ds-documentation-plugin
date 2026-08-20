@@ -12,7 +12,15 @@ import type {
   ListItem,
   VariantRef,
 } from '../../shared/types'
-import { liveNoteCount, readIndex, readLog } from '../storage'
+import {
+  draftCount,
+  liveNoteCount,
+  planVariantMigration,
+  readIndex,
+  readLog,
+  replaceLog,
+  updateIndex,
+} from '../storage'
 
 /** Components sitting directly on a page rather than inside a section. */
 export const UNGROUPED_ID = '__ungrouped__'
@@ -301,4 +309,58 @@ export async function componentStructure(
     nestedComponents: nested.length > 0 ? nested : undefined,
     parentName: node.parent?.type === 'SECTION' ? node.parent.name : undefined,
   }
+}
+
+/**
+ * Brings any per-variant notes in a set up onto the set as scoped notes.
+ *
+ * Runs when a component is opened and again on export, so a file migrates the
+ * first time anyone looks at it and nobody has to be told. Almost always does
+ * nothing: the index is consulted first, so an untouched set costs a handful of
+ * map lookups rather than a plugin-data read per variant.
+ */
+export function migrateVariantNotes(node: DocumentableComponent): number {
+  if (node.type !== 'COMPONENT_SET') return 0
+
+  const index = readIndex()
+  const carriers = node.children.filter(
+    (child) => child.type === 'COMPONENT' && (index[child.id]?.noteCount ?? 0) > 0
+  ) as ComponentNode[]
+  if (carriers.length === 0) return 0
+
+  let moved = 0
+  for (const variant of carriers) {
+    const variantLog = readLog(variant)
+    if (variantLog.length === 0) continue
+
+    const scope = variant.variantProperties ?? {}
+    const plan = planVariantMigration(readLog(node), variantLog, scope)
+    if (plan.moved === 0) {
+      // Nothing new to carry, but the variant is still holding a copy.
+      replaceLog(variant, 'variant', variant.name, [])
+      updateIndex(variant.id, 'variant', variant.name, 0)
+      continue
+    }
+
+    // Write to the set first, and read it back before clearing the variant —
+    // a note must never exist in neither place.
+    replaceLog(node, 'componentSet', node.name, plan.merged)
+    const confirmed = new Set(readLog(node).map((entry) => entry.id))
+    const carried = variantLog.every((entry) => confirmed.has(entry.id))
+    if (!carried) {
+      console.error('[dsdoc] variant migration did not land; leaving', variant.name, 'as it was')
+      continue
+    }
+
+    replaceLog(variant, 'variant', variant.name, [])
+    updateIndex(variant.id, 'variant', variant.name, 0)
+    moved += plan.moved
+  }
+
+  if (moved > 0) {
+    const log = readLog(node)
+    updateIndex(node.id, 'componentSet', node.name, liveNoteCount(log), draftCount(log))
+    console.log('[dsdoc] moved', moved, 'variant note(s) onto', node.name)
+  }
+  return moved
 }

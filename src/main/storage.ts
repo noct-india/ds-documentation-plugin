@@ -458,6 +458,55 @@ export function writeBrief(text: string): void {
   figma.root.setPluginData(BRIEF_META_KEY, encode({ chunks }))
 }
 
+/**
+ * Moves a variant's notes onto its set, as a fully-specified scope.
+ *
+ * The plugin briefly stored per-variant notes on the variant node itself. That
+ * cannot express "all primary buttons" — there is no node for it — so scoped
+ * notes live on the set, and these have to join them or the file ends up with
+ * two ways of saying the same thing.
+ *
+ * Order matters and is not negotiable: the notes are written to the set and
+ * read back before anything is cleared from the variant. A crash between the
+ * two leaves a duplicate, which the id guard then absorbs on the next run. The
+ * reverse order would lose the note outright.
+ *
+ * Returns the entries to write and whether the variant should then be cleared,
+ * so the caller owns the writes and this stays testable.
+ */
+export function planVariantMigration(
+  setLog: NoteEntry[],
+  variantLog: NoteEntry[],
+  scope: Record<string, string>
+): { merged: NoteEntry[]; moved: number } {
+  // Already carried across by an earlier run that did not finish. Matching on
+  // id rather than text: two variants can legitimately carry the same wording.
+  const known = new Set(setLog.map((entry) => entry.id))
+  const incoming = variantLog
+    .filter((entry) => !known.has(entry.id))
+    .map((entry) => ({
+      ...entry,
+      // A note written against one variant was always about that exact
+      // combination; saying so explicitly is the whole migration.
+      scope: Object.keys(scope).length > 0 ? scope : entry.scope,
+    }))
+
+  return {
+    merged: [...setLog, ...incoming].sort((a, b) => a.ts - b.ts),
+    moved: incoming.length,
+  }
+}
+
+/** Writes a log wholesale. Used by the migration, which owns entry ids. */
+export function replaceLog(
+  host: PluginDataHost,
+  kind: EntityKind,
+  name: string,
+  log: NoteEntry[]
+): void {
+  persistLog(host, kind, name, log)
+}
+
 // ─── Root index ──────────────────────────────────────────────────────────────
 
 export interface IndexEntry {

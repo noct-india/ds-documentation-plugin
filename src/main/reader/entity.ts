@@ -6,7 +6,7 @@
 import type { EntityKind, EntityStructure } from '../../shared/types'
 import { folderKeyPrefix, folderName, parseFolderId } from '../../shared/folder'
 import { scopedHost, type PluginDataHost } from '../storage'
-import { componentStructure } from './components'
+import { componentStructure, migrateVariantNotes } from './components'
 import { styleStructure, type StyleKind } from './styles'
 import { collectionStructure, variableStructure } from './variables'
 
@@ -198,6 +198,10 @@ export async function resolveEntity(
   // component | componentSet
   const node = await figma.getNodeByIdAsync(entityId)
   if (!node || (node.type !== 'COMPONENT' && node.type !== 'COMPONENT_SET')) return null
+  // Carries any notes still sitting on individual variant nodes up onto the set
+  // as scoped notes. Costs a few map lookups when there are none, which is the
+  // usual case; a file migrates the first time anyone opens the component.
+  migrateVariantNotes(node)
   return {
     host: node,
     name: node.name,
