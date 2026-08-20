@@ -1,10 +1,18 @@
-# Design System Documentation (v2) — Figma plugin
+# Design System Documentation — Figma plugin
 
-> **This is v2.** It carries a component viewer and per-variant notes; v1 lives on
-> untouched in `DS documentation plugin/`. The two have **different manifest ids**, so
-> Figma keeps their notes in separate stores — v2 cannot read or damage anything v1
-> wrote, and starts empty. If v2 becomes the version to keep, changing its manifest `id`
-> back to `ds-documentation-plugin-noct` reconnects this code to v1's notes.
+> **Graduated from `AI implementation/experiments/` on 2026-08-19.** This is `main` in
+> `github.com/noct-india/ds-documentation-plugin` (private).
+>
+> **It keeps its own manifest `id` (`…-noct-v2`), so it starts with no notes.** Figma
+> scopes stored data to the plugin id, so documentation written with the earlier version
+> is not visible here. That was a deliberate choice — this code has more surface and the
+> isolation means a bug in it cannot reach work already done.
+>
+> The earlier version is tagged `simple-version` and checked out at
+> `AI implementation/experiments/DS documentation plugin/`, pinned to that tag. To read
+> the notes written with it, run that one. To adopt them here instead, change `id` in
+> `manifest.json` back to `ds-documentation-plugin-noct` — one line, and everything
+> written under the old id reappears.
 
 
 Attach written documentation to every element of a Figma design system, and export it
