@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react'
 import type { HomeState, SectionKey } from '../../shared/types'
 import { SECTION_LABELS, sectionsFor } from '../../shared/types'
+import { Check, Cross } from '../icons'
 
 interface Props {
   home: HomeState | null
@@ -35,19 +36,23 @@ function ProjectGuidelines({ filled }: { filled: SectionKey[] }) {
             : `${done} of ${sections.length} written`}
         </span>
       </div>
+      {/* Read-only status, so no chip: a pill reads as something you can press.
+          The mark carries the meaning and stays the same neutral as the text —
+          the label's weight is what separates written from not. */}
       <div className="guidelines-row">
         {sections.map((key) => {
           const has = filled.indexOf(key) !== -1
           return (
             <span
               key={key}
-              className={`guidelines-chip${has ? ' on' : ''}`}
+              className={`guidelines-item${has ? ' on' : ''}`}
               title={
                 has
                   ? `${SECTION_LABELS[key]} — written`
                   : `${SECTION_LABELS[key]} — nothing written, so it will be inferred`
               }
             >
+              {has ? <Check /> : <Cross />}
               {SECTION_LABELS[key]}
             </span>
           )

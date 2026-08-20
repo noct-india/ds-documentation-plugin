@@ -1631,25 +1631,27 @@ button {
   color: var(--text-faint);
 }
 
+/* Wider than it was as chips: without a box around each one, 5px let the
+   label of one run into the mark of the next and read as a single string. */
 .guidelines-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 5px;
+  gap: 4px 14px;
 }
 
-/* An outlined chip is a gap. Filled means someone has written that rule down. */
-.guidelines-chip {
-  padding: 3px 9px;
-  border: 1px solid var(--border-strong);
-  border-radius: 99px;
+/* Read-only status. No border, no fill — a box here would read as a control.
+   The mark is the same neutral as the text; only the label's weight changes. */
+.guidelines-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-size: 10px;
   color: var(--text-faint);
 }
 
-.guidelines-chip.on {
-  border-color: transparent;
-  background: rgb(124 196 255 / 0.14);
-  color: var(--text);
+.guidelines-item.on {
+  color: var(--text-dim);
+  font-weight: 500;
 }
 
 /* The one stat that has to be asked for. Sits inside the table as its footer,

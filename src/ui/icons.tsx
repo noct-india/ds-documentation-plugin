@@ -150,3 +150,19 @@ export const Download = ({ size = 14 }: IconProps) => (
     <path d="M8 2v8m0 0 3-3m-3 3L5 7M2.5 12.5h11" />
   </svg>
 )
+
+// ─── Status marks ────────────────────────────────────────────────────────────
+// Written vs not. Drawn rather than typed as ✓/✗, which render at different
+// weights and baselines depending on the font that answers for them.
+
+export const Check = ({ size = 12 }: IconProps) => (
+  <svg {...base(size)} strokeWidth={1.9}>
+    <path d="M3 8.5 6.5 12 13 4.5" />
+  </svg>
+)
+
+export const Cross = ({ size = 12 }: IconProps) => (
+  <svg {...base(size)} strokeWidth={1.9}>
+    <path d="M4 4l8 8M12 4l-8 8" />
+  </svg>
+)
