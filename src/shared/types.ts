@@ -575,6 +575,16 @@ export type Request =
       section: SectionKey
     }
   | { type: 'revealEntity'; entityId: string; entityKind: EntityKind }
+  | {
+      /**
+       * The component total, which needs every page loaded.
+       *
+       * Deliberately not part of `getHome`: that runs on open and after every
+       * saved note, and `loadAllPagesAsync()` is documented as slow on large
+       * files. Behind a button it is a cost someone chose to pay.
+       */
+      type: 'countComponents'
+    }
   | { type: 'buildExport' }
   | { type: 'resize'; width: number; height: number }
   // Where the bridge lives on this machine, learned from the bridge itself and
@@ -624,6 +634,7 @@ export interface ResponseMap {
   deleteNote: EntityDetail
   recategorizeNote: EntityDetail
   revealEntity: null
+  countComponents: number
   buildExport: { fileName: string; files: ExportFile[] }
   resize: null
   rememberBridgeHome: null

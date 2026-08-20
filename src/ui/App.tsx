@@ -642,6 +642,18 @@ export function App() {
                   .then(setHome)
                   .catch((err: Error) => notify(err.message, true))
               }}
+              onCountComponents={() =>
+                call({ type: 'countComponents' })
+                  .then((components) => {
+                    // Merged rather than refetched: everything else in `home` is
+                    // already current, and a second getHome would redo the
+                    // coverage walk for one number.
+                    setHome((current) =>
+                      current ? { ...current, counts: { ...current.counts, components } } : current
+                    )
+                  })
+                  .catch((err: Error) => notify(err.message, true))
+              }
             />
           )}
         </main>

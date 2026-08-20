@@ -9,6 +9,8 @@ interface Props {
   home: HomeState | null
   error: string | null
   onSaveBrief: (text: string) => void
+  /** Walks every page for the component total. Resolves when the number is in. */
+  onCountComponents: () => Promise<void>
 }
 
 /**
@@ -55,8 +57,9 @@ function ProjectGuidelines({ filled }: { filled: SectionKey[] }) {
   )
 }
 
-export function Overview({ home, error, onSaveBrief }: Props) {
+export function Overview({ home, error, onSaveBrief, onCountComponents }: Props) {
   const [brief, setBrief] = useState<string | null>(null)
+  const [counting, setCounting] = useState(false)
 
   // Adopt whatever is stored until the designer starts typing, then leave their
   // draft alone — a coverage refresh must not wipe a half-written brief.
@@ -130,6 +133,31 @@ export function Overview({ home, error, onSaveBrief }: Props) {
             </span>
           </div>
         )}
+
+        {/* The component total is the one figure that costs something to get —
+            it means loading every page. Everything else is read on open, so
+            only this sits behind a button. */}
+        <div className="stat-action">
+          <span className="stat-of">
+            {counts.components === null
+              ? 'Component total needs every page loaded'
+              : 'Counted — run again after adding components'}
+          </span>
+          <button
+            className="link-btn"
+            disabled={counting}
+            onClick={() => {
+              setCounting(true)
+              onCountComponents().finally(() => setCounting(false))
+            }}
+          >
+            {counting
+              ? 'Counting…'
+              : counts.components === null
+                ? 'Count components'
+                : 'Recount'}
+          </button>
+        </div>
       </div>
 
       <ProjectGuidelines filled={home.projectSections} />

@@ -1651,3 +1651,20 @@ button {
   background: rgb(124 196 255 / 0.14);
   color: var(--text);
 }
+
+/* The one stat that has to be asked for. Sits inside the table as its footer,
+   so the row it fills in is directly above it. */
+.stat-action {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-raised);
+  font-size: 10px;
+}
+
+.stat-action .link-btn {
+  flex: 0 0 auto;
+}

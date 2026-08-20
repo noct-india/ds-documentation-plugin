@@ -47,6 +47,7 @@ import { invalidatePreviewCache, renderNode } from './reader/preview'
 import { listCollections, getCollectionTree, invalidateVariableCache } from './reader/variables'
 import { getStyleTree, invalidateStyleCache } from './reader/styles'
 import {
+  allComponents,
   invalidateComponentCache,
   listComponents,
   listPages,
@@ -293,6 +294,13 @@ async function handle(request: Request): Promise<unknown> {
           progress(`Reading pages — ${done} of ${total}…`)
         }
       })
+
+    case 'countComponents': {
+      progress('Loading all pages — this can take a moment on large files…')
+      await figma.loadAllPagesAsync()
+      const found = await allComponents()
+      return found.length
+    }
 
     case 'getPageSections':
       return listSections(request.pageId)
