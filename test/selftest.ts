@@ -23,6 +23,7 @@ import {
   type PluginDataHost,
 } from '../src/main/storage'
 import { buildTree, flattenLeaves, folderAt, renderTreeOutline } from '../src/shared/tree'
+import { matchVariant, reconcile } from '../src/shared/variants'
 import { componentDir, slug, uniqueSlugger } from '../src/shared/slug'
 import { isDocumented, renderAuthoredSections, renderEntityDoc } from '../src/main/export/render'
 import { classify, classifySegments, splitIntoSentences } from '../src/shared/classify'
@@ -1274,6 +1275,52 @@ section('coverage: what counts as documented, and what quietly should not')
   const projectSections = sectionsFor('project')
   check('the project offers a layout section', projectSections.indexOf('layout' as SectionKey) !== -1)
   check('every project section has a label for the chip', projectSections.every((k) => Boolean(SECTION_LABELS[k])))
+}
+
+section('variants: a sparse set never strands the picker')
+
+{
+  // A real set, deliberately not a full cross-product: "Mobile Link" was only
+  // ever drawn at Small, and Tertiary has no Pressed state. Every combination
+  // the dropdowns can express is not a variant somebody made.
+  const v = (id: string, Type: string, State: string, Size: string) => ({
+    id,
+    name: `Type=${Type}, State=${State}, Size=${Size}`,
+    properties: { Type, State, Size },
+  })
+  const variants = [
+    v('1', 'Primary', 'Default', 'Large'),
+    v('2', 'Primary', 'Hover', 'Large'),
+    v('3', 'Primary', 'Default', 'Small'),
+    v('4', 'Tertiary', 'Default', 'Large'),
+    v('5', 'Tertiary', 'Default', 'Small'),
+    v('6', 'Mobile Link', 'Default', 'Small'),
+  ]
+
+  const start = { Type: 'Primary', State: 'Default', Size: 'Large' }
+  check('an existing combination resolves', matchVariant(variants, start)?.id === '1')
+
+  // The case from the bug report: Mobile Link does not exist at Large.
+  const moved = reconcile(variants, start, 'Type', 'Mobile Link')
+  check('the property just changed is honoured', moved.Type === 'Mobile Link')
+  check('the rest give way to something real', matchVariant(variants, moved)?.id === '6')
+  check('so the picker still points at a variant', matchVariant(variants, moved) !== undefined)
+
+  // Where the combination does exist, nothing else should move.
+  const kept = reconcile(variants, start, 'State', 'Hover')
+  check('an available change moves only that property', kept.Size === 'Large' && kept.Type === 'Primary')
+  check('and lands exactly', matchVariant(variants, kept)?.id === '2')
+
+  // Closest means most properties retained, not first in the list.
+  const fromSmall = { Type: 'Mobile Link', State: 'Default', Size: 'Small' }
+  const toTertiary = reconcile(variants, fromSmall, 'Type', 'Tertiary')
+  check('the nearest variant wins, not the first', toTertiary.Size === 'Small')
+
+  // A value no variant carries cannot be snapped to. The selection stands and
+  // the viewer reports it, rather than silently jumping somewhere unrelated.
+  const impossible = reconcile(variants, start, 'Type', 'Ghost')
+  check('an unavailable value is left as chosen', impossible.Type === 'Ghost')
+  check('and is reported as having no variant', matchVariant(variants, impossible) === undefined)
 }
 
 // ─── Result ──────────────────────────────────────────────────────────────────

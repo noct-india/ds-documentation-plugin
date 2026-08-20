@@ -15,9 +15,9 @@ import type {
   ComponentProperty,
   EntityKind,
   EntityStructure,
-  VariantRef,
 } from '../shared/types'
 import { call } from './rpc'
+import { matchVariant, reconcile } from '../shared/variants'
 
 /**
  * What a note is written to.
@@ -63,16 +63,6 @@ function variantProps(properties: ComponentProperty[]): ComponentProperty[] {
 /** Properties applied on top of a variant — these need an instance to show. */
 function overrideProps(properties: ComponentProperty[]): ComponentProperty[] {
   return properties.filter((p) => p.type === 'BOOLEAN' || p.type === 'TEXT')
-}
-
-/** The variant matching a chosen combination, if the set has one. */
-function matchVariant(
-  variants: VariantRef[],
-  chosen: Record<string, string>
-): VariantRef | undefined {
-  return variants.find((variant) =>
-    Object.keys(chosen).every((key) => variant.properties[key] === chosen[key])
-  )
 }
 
 export function ComponentViewer({
@@ -166,7 +156,9 @@ export function ComponentViewer({
                 className="viewer-select"
                 value={chosen[property.displayName] ?? property.defaultValue}
                 onChange={(e) =>
-                  onChosenChange({ ...chosen, [property.displayName]: e.target.value })
+                  onChosenChange(
+                    reconcile(variants, chosen, property.displayName, e.target.value)
+                  )
                 }
               >
                 {property.options?.map((option) => (
@@ -230,10 +222,16 @@ export function ComponentViewer({
         </div>
       </div>
 
-      {/* Which thing a note is written to. Always visible, never inferred —
-          a picker that quietly redirected writes would be the ideal way to
-          file notes against the wrong element. */}
-      {current && (
+      {/* Which thing a note is written to. Always visible, never inferred — a
+          picker that quietly redirected writes would be the ideal way to file
+          notes against the wrong element.
+
+          Shown whenever the set has variants at all, not only when the current
+          combination resolves to one. Hiding the row took the way back to
+          set-level with it, so landing on a combination nobody drew left you
+          stuck. `reconcile` should now prevent that, and this is the guarantee
+          that a future gap in it cannot strand anyone. */}
+      {variants.length > 0 && (
         <div className="viewer-target">
           <span className="viewer-target-label">Writing about</span>
           <button
@@ -244,15 +242,24 @@ export function ComponentViewer({
           >
             {name}, all variants
           </button>
-          <button
-            className={`viewer-target-opt${onSet ? '' : ' on'}`}
-            onClick={() =>
-              onTargetChange({ entityId: current.id, entityKind: 'variant', name: current.name })
-            }
-            title={`Write a note about only ${current.name}`}
-          >
-            This one · {current.name}
-          </button>
+          {current ? (
+            <button
+              className={`viewer-target-opt${onSet ? '' : ' on'}`}
+              onClick={() =>
+                onTargetChange({ entityId: current.id, entityKind: 'variant', name: current.name })
+              }
+              title={`Write a note about only ${current.name}`}
+            >
+              This one · {current.name}
+            </button>
+          ) : (
+            <span
+              className="viewer-target-opt off"
+              title="No variant in this set has that combination, so there is nothing to write a note about."
+            >
+              This combination doesn't exist
+            </span>
+          )}
         </div>
       )}
     </div>

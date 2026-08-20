@@ -1668,3 +1668,10 @@ button {
 .stat-action .link-btn {
   flex: 0 0 auto;
 }
+
+/* A combination nobody drew. Not a button — there is nothing to write to. */
+.viewer-target-opt.off {
+  border-style: dashed;
+  color: var(--text-faint);
+  cursor: default;
+}
