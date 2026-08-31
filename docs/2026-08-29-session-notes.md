@@ -166,3 +166,23 @@ NEW  src/main/history.ts        + clearHistoryFor
 - **Figma smoke test** of: the four tabs + fixed composer, Reset's confirm + clean-slate,
   the single Writing-about strip, and the status bar's green/blue dots.
 - **Commit** everything on a branch with a clear history.
+
+---
+
+# Update 2 — landed on main, v2 deleted (2026-08-29)
+
+- Committed the entire working tree straight onto `main` as **`08a01ea`** (one commit, 27
+  files), **fast-forward** push to `origin/main` — no branch, no merge, no force. Local
+  `main` == `origin/main`. Chose this over branch+merge/force because origin/main was clean
+  at `f5261b2`, so a direct commit makes local the winner with zero risk.
+- Backup tag **`pre-redesign-main`** → `f5261b2` (pre-redesign state) as a restore point.
+  Undo path if ever needed: `git revert 08a01ea`, or
+  `git reset --hard pre-redesign-main && git push --force-with-lease origin main`.
+- Deleted the **`v2`** branch, local + `origin/v2`. It was fully merged into `main`
+  (`5d1dfd2`, an ancestor), so nothing was lost. Remaining refs: `main` only.
+- The earlier "commit everything" open item is **DONE**.
+
+## Still open (next session)
+- **★ TOP — full operational-transform undo** (user: "i need this approach") — headline task.
+- **Figma smoke test** of the whole right-pane redesign + status bar + per-item Reset (built
+  and typechecked, never run visually).
