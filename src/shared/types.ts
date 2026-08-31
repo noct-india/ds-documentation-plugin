@@ -507,6 +507,12 @@ export interface DraftNote {
   entityKind: EntityKind
   section: SectionKey
   text: string
+  /**
+   * Which combination the suggestion is about, if it was drafted while a scope
+   * was active. Carried from the viewer's "Writing about …" selector so an AI
+   * draft lands under the same `When Type = Primary` heading a typed note would.
+   */
+  scope?: Record<string, string>
 }
 
 export type BridgeStatus = 'off' | 'connecting' | 'connected'
@@ -517,6 +523,35 @@ export interface ExportFile {
   /** Path inside the zip, e.g. "guidelines/components/button.md". */
   path: string
   content: string
+}
+
+// ─── Edit history ────────────────────────────────────────────────────────────
+
+export type HistoryOp = 'add' | 'edit' | 'delete' | 'approve' | 'reject' | 'recategorize'
+
+/** The fields an undo or redo may put back on a note. */
+export interface NotePatch {
+  text?: string
+  section?: SectionKey
+  deleted?: boolean
+  draft?: boolean
+}
+
+/** One reversible change, in the document-level edit history. */
+export interface HistoryEntry {
+  id: string
+  ts: number
+  op: HistoryOp
+  entityId: string
+  entityKind: EntityKind
+  entityName: string
+  noteId: string
+  /** A short human sentence for the list. */
+  summary: string
+  before: NotePatch
+  after: NotePatch
+  /** Set once undone; a redo clears it. */
+  undone?: boolean
 }
 
 // ─── RPC ─────────────────────────────────────────────────────────────────────
@@ -621,6 +656,12 @@ export type Request =
       overrides?: Record<string, string | boolean>
       maxPx?: number
     }
+  | { type: 'getHistory'; entityId?: string }
+  | { type: 'historyUndo'; id: string; direction: 'undo' | 'redo' }
+  | { type: 'historyUndoAll'; entityId?: string }
+  // A full clean slate for ONE item: every dsdoc.* key on its node (notes, body,
+  // doc cache, and any stale keys from earlier plugin builds) plus its history.
+  | { type: 'clearEntity'; entityId: string; entityKind: EntityKind }
 
 export interface ResponseMap {
   getHome: HomeState
@@ -648,6 +689,10 @@ export interface ResponseMap {
   reviewDrafts: EntityDetail
   deleteNote: EntityDetail
   recategorizeNote: EntityDetail
+  getHistory: HistoryEntry[]
+  historyUndo: HistoryEntry[]
+  historyUndoAll: HistoryEntry[]
+  clearEntity: EntityDetail
   revealEntity: null
   countComponents: number
   buildExport: { fileName: string; files: ExportFile[] }

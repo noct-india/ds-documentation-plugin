@@ -12,13 +12,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ComponentProperty, EntityKind, EntityStructure } from '../shared/types'
 import { call } from './rpc'
-import {
-  describeScope,
-  matchVariant,
-  reconcile,
-  scopeReach,
-  type Scope,
-} from '../shared/variants'
+import { matchVariant, reconcile, type Scope } from '../shared/variants'
 
 /**
  * What a note is written to.
@@ -122,17 +116,6 @@ export function ComponentViewer({
         : scoped.filter((p) => p !== property)
     )
   }
-
-  // What the next note will be about, built from the ticked properties and the
-  // values currently on screen.
-  const scope: Scope = {}
-  for (const property of scoped) {
-    if (chosen[property] !== undefined) scope[property] = chosen[property]
-  }
-  const scopeSize = Object.keys(scope).length
-  const reach = scopeReach(variants, scope)
-  const everything = scopeSize === 0
-  const exact = scopeSize > 0 && scopeSize === selectors.length + overridables.length
 
   const row = (property: ComponentProperty, control: React.ReactNode) => {
     const on = scoped.indexOf(property.displayName) !== -1
@@ -266,26 +249,6 @@ export function ComponentViewer({
         </div>
       )}
 
-      {/* What the next note is about. Never inferred: this is the control that
-          decides where what you type ends up. */}
-      <div className="viewer-scope">
-        <span className="viewer-scope-label">Writing about</span>
-        <span className="viewer-scope-value">
-          {everything ? `${name} — every variant` : describeScope(scope)}
-        </span>
-        <span className="viewer-scope-reach">
-          {everything
-            ? `all ${variants.length || ''} variants`.trim()
-            : exact
-              ? 'this exact variant'
-              : `${reach} of ${variants.length} variants`}
-        </span>
-        {scopeSize > 0 && (
-          <button className="viewer-scope-clear" onClick={() => onScopedChange([])}>
-            clear
-          </button>
-        )}
-      </div>
     </div>
   )
 }

@@ -18,6 +18,8 @@ import type { DocumentedCounts, EntityKind, EntityMeta, NoteEntry, SectionKey } 
 export interface PluginDataHost {
   getPluginData(key: string): string
   setPluginData(key: string, value: string): void
+  /** Real Figma nodes expose this; a synthetic (folder) host does not. */
+  getPluginDataKeys?(): string[]
 }
 
 const META_KEY = 'dsdoc.meta'
@@ -97,6 +99,30 @@ function writeChunks(
     host.setPluginData(`${base}.${i}`, '')
   }
   return parts.length
+}
+
+/**
+ * A chunked JSON value under its own key, for stores that are not the note log.
+ *
+ * The edit history uses this: it lives on the document under its own key, kept
+ * deliberately apart from any note's data and from the rendered markdown, so a
+ * record of changes never sits inside the content it describes. The chunk count
+ * is held in `<base>.n`, the chunks in `<base>.0`, `<base>.1`, …
+ */
+export function writeChunkedValue(host: PluginDataHost, base: string, value: unknown): void {
+  const previous = Number(host.getPluginData(`${base}.n`) || '0')
+  const count = writeChunks(host, base, encode(value), previous)
+  host.setPluginData(`${base}.n`, String(count))
+}
+
+export function readChunkedValue<T>(host: PluginDataHost, base: string, fallback: T): T {
+  const count = Number(host.getPluginData(`${base}.n`) || '0')
+  if (count <= 0) return fallback
+  try {
+    return decode<T>(readChunks(host, base, count), fallback)
+  } catch {
+    return fallback
+  }
 }
 
 // ─── Meta ────────────────────────────────────────────────────────────────────
@@ -266,6 +292,36 @@ export function editNote(
  * Batch notes get their own id on each component, so a shared note can only be
  * matched by what it says.
  */
+/**
+ * Applies a targeted patch to one note and persists — the single primitive the
+ * edit-history undo/redo builds every reversal on (restore a deletion, re-draft
+ * an approval, put text or a category back). Overwrites rather than revisioning:
+ * the prior value already lives in the history entry doing the reverting.
+ */
+export function patchNote(
+  host: PluginDataHost,
+  kind: EntityKind,
+  name: string,
+  noteId: string,
+  patch: { text?: string; section?: SectionKey; deleted?: boolean; draft?: boolean }
+): NoteEntry[] {
+  const log = readLog(host)
+  const entry = log.find((e) => e.id === noteId)
+  if (!entry) return log
+  if (patch.text !== undefined) entry.text = patch.text
+  if (patch.section !== undefined) entry.section = patch.section
+  if (patch.deleted !== undefined) {
+    if (patch.deleted) entry.deleted = true
+    else delete entry.deleted
+  }
+  if (patch.draft !== undefined) {
+    if (patch.draft) entry.draft = true
+    else delete entry.draft
+  }
+  persistLog(host, kind, name, log)
+  return log
+}
+
 export function findNotesMatching(
   log: NoteEntry[],
   section: SectionKey,
@@ -409,6 +465,30 @@ export function insertUnderHeading(body: string, headingText: string, bullets: s
  * path. Prefixing keys rather than inventing a second storage path means
  * chunking, migration and the never-lose guarantees all apply unchanged.
  */
+/**
+ * Wipes every trace of this plugin from one node — a full clean slate.
+ *
+ * On a real node it sweeps every `dsdoc.*` key, which catches stale markers left
+ * by earlier builds under names the current code no longer writes. A synthetic
+ * folder host has no key list, so it clears the stores the meta knows about.
+ */
+export function clearAllEntityData(host: PluginDataHost): void {
+  const keys = host.getPluginDataKeys?.()
+  if (keys) {
+    for (const key of keys) {
+      if (key.startsWith('dsdoc.')) host.setPluginData(key, '')
+    }
+    return
+  }
+  const meta = readMeta(host)
+  if (meta) {
+    for (let i = 0; i < (meta.chunks.log ?? 0); i++) host.setPluginData(`${LOG_KEY}.${i}`, '')
+    for (let i = 0; i < (meta.chunks.doc ?? 0); i++) host.setPluginData(`${DOC_KEY}.${i}`, '')
+    for (let i = 0; i < (meta.chunks.body ?? 0); i++) host.setPluginData(`${BODY_KEY}.${i}`, '')
+  }
+  host.setPluginData(META_KEY, '')
+}
+
 export function scopedHost(host: PluginDataHost, prefix: string): PluginDataHost {
   return {
     getPluginData: (key) => host.getPluginData(`${prefix}.${key}`),
@@ -652,19 +732,23 @@ export function appendDrafts(
   host: PluginDataHost,
   kind: EntityKind,
   name: string,
-  drafts: Array<{ text: string; section: SectionKey }>,
+  drafts: Array<{ text: string; section: SectionKey; scope?: Record<string, string> }>,
   author: string
 ): NoteEntry[] {
   const log = readLog(host)
   for (const draft of drafts) {
-    log.push({
+    const entry: NoteEntry = {
       id: `${Date.now()}-${counter++}`,
       ts: Date.now(),
       author,
       text: draft.text,
       section: draft.section,
       draft: true,
-    })
+    }
+    // A draft carries the same scope a typed note would, so approving it lands
+    // it under the right heading rather than silently as a whole-set rule.
+    if (draft.scope && Object.keys(draft.scope).length > 0) entry.scope = draft.scope
+    log.push(entry)
   }
   persistLog(host, kind, name, log)
   return log

@@ -74,20 +74,27 @@ If that second command asks you to log in, run `claude` once on its own first.
 
 ### Set it up
 
-**On a Mac, double-click `bridge/Start Claude bridge.command`.** It installs what it needs
-on first run, checks nothing else is holding the port, and starts the bridge. That is the
-whole setup — you never need to type any of this again.
+**On a Mac, double-click `bridge/Start Claude bridge.command`.**
+**On Windows, double-click `bridge\Start Claude bridge.cmd`.**
+Either one installs what it needs on first run, checks nothing else is holding the port, and
+starts the bridge. That is the whole setup — you never need to type any of this again. Leave
+the window it opens running while you work.
 
 Can't find it? Open the plugin and press **Start it** next to the status line at the bottom
 of the sidebar. Once the bridge has connected once, that panel shows the exact path to the
 launcher on your machine and will copy it for you.
 
-**Tired of starting it at all?** Double-click `bridge/Run bridge at login.command` once and
-the bridge starts with every login and restarts if it ever stops. An idle bridge costs
-nothing — it only runs Claude when you actually ask for drafts. Double-click the same file
-again to undo it.
+**Tired of starting it at all?** Double-click the "run at login" file once and the bridge
+starts on its own with every login — `bridge/Run bridge at login.command` on a Mac,
+`bridge\Run bridge at login.cmd` on Windows. An idle bridge costs nothing — it only runs
+Claude when you actually ask for drafts. Double-click the same file again to undo it.
 
-If you'd rather use a terminal, or you're not on a Mac:
+On a Mac the login item also restarts the bridge immediately if it ever stops. On Windows it
+starts at each login (and comes back the next time you log in if it ever stops) and runs with
+no window; to bring it back right away without logging out, double-click
+`Start Claude bridge.cmd`. Its log is at `%LOCALAPPDATA%\NOCT\dsdoc-bridge.log`.
+
+If you'd rather use a terminal (any OS):
 
 ```bash
 cd bridge
@@ -154,15 +161,20 @@ between *"no constraint"* and *"nobody has said yet"*.
 manifest.
 
 **"Claude bridge off"** — the bridge isn't running. Double-click
-`bridge/Start Claude bridge.command`, or `cd bridge && node server.mjs`.
+`bridge/Start Claude bridge.command` (Mac) or `bridge\Start Claude bridge.cmd` (Windows), or
+run `cd bridge && node server.mjs` in a terminal.
 
 **"port 8473 is already in use"** — a bridge is already running somewhere. The launcher
-spots this, names the process and offers to stop it. By hand:
-`lsof -nP -iTCP:8473 -sTCP:LISTEN` then `kill <pid>`.
+spots this, names the process and offers to stop it. By hand on a Mac:
+`lsof -nP -iTCP:8473 -sTCP:LISTEN` then `kill <pid>`. On Windows:
+`netstat -ano | findstr :8473` then `taskkill /PID <pid> /F`.
 
-**Double-clicking the launcher does nothing, or opens a text editor** — the executable bit
-was lost, which some unzip tools do. Fix it once with
-`chmod +x "bridge/Start Claude bridge.command"`.
+**Double-clicking the launcher does nothing, or opens a text editor** — on a Mac the
+executable bit was lost, which some unzip tools do; fix it once with
+`chmod +x "bridge/Start Claude bridge.command"`. On Windows, right-click
+`Start Claude bridge.cmd` and choose **Run** (or **Open**); if SmartScreen warns about an
+unrecognised script, choose **More info**, then **Run anyway** — it is the local file you
+just unzipped, nothing is downloaded.
 
 **Drafting fails with a 401** — the Claude CLI login has expired. Run `claude` once
 interactively. Alternatively `export ANTHROPIC_API_KEY=...` before starting the bridge and

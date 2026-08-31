@@ -233,10 +233,15 @@ export function renderEntityDoc(
       : renderStructure(name, kind, structure, level),
   ]
 
-  const groups = groupBySection(log)
+  // Whole-entity notes render under plain section headings. Notes scoped to a
+  // combination get their own "When Type = Primary" block afterwards, so a rule
+  // about one variant is never read as a rule about the whole set. This is the
+  // per-entity twin of renderAuthoredSections; without it a scoped note stored
+  // correctly still renders (and exports) as an unscoped whole-set rule.
+  const unscopedGroups = groupBySection(log.filter((e) => scopeDepth(e.scope) === 0))
 
-  for (const key of orderedSections(kind, groups)) {
-    const entries = groups.get(key) ?? []
+  for (const key of orderedSections(kind, unscopedGroups)) {
+    const entries = unscopedGroups.get(key) ?? []
     if (entries.length === 0 && !options.includeEmptySections) continue
     blocks.push(heading(level + 1, SECTION_HEADINGS[key]))
     blocks.push(
@@ -244,11 +249,28 @@ export function renderEntityDoc(
     )
   }
 
+  // General first, then narrowing conditions — an agent should read what is
+  // always true before the cases that qualify it. renderSections drops drafts
+  // and deletions, so an empty scope produces no stray heading.
+  let hasScopedNotes = false
+  for (const [, group] of groupByScope(log)) {
+    const body = renderSections(group.entries, kind, level + 2)
+    if (!body.trim()) continue
+    hasScopedNotes = true
+    blocks.push(heading(level + 1, `When ${describeScope(group.scope)}`))
+    blocks.push(body)
+  }
+
   // No "not documented yet" placeholder in a notes-only export: nothing
   // undocumented is written at all, so the warning would have nothing to warn
   // about. Absence carries the meaning instead — a name missing from the
   // guidelines is a name nobody has written a rule for.
-  if (groups.size === 0 && !options.includeEmptySections && !options.notesOnly) {
+  if (
+    unscopedGroups.size === 0 &&
+    !hasScopedNotes &&
+    !options.includeEmptySections &&
+    !options.notesOnly
+  ) {
     blocks.push(
       `> ⚠️ Not documented yet — no usage rules have been written for this ${structure.typeLabel.toLowerCase()}. Do not infer constraints for it; ask instead.`
     )

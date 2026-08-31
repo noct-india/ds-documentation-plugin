@@ -16,4 +16,9 @@ package/
 # Drive mount.
 bridge/.chmodtest.command
 
+# Machine-specific absolute path to node, written by "Run bridge at login.cmd" so
+# the hidden logon start doesn't depend on the session PATH. Per-machine — never
+# committed or shipped.
+bridge/.node-path
+
 .DS_Store

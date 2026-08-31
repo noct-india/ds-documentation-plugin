@@ -34,6 +34,12 @@ const INCLUDE = [
   // it, so they arrive executable rather than as text files nobody can run.
   'bridge/Start Claude bridge.command',
   'bridge/Run bridge at login.command',
+  // Windows equivalents of the two launchers above, plus the tiny script the
+  // login task uses to start the bridge without a console window. Without these
+  // in the zip, a Windows recipient has no launcher at all.
+  'bridge/Start Claude bridge.cmd',
+  'bridge/Run bridge at login.cmd',
+  'bridge/run-hidden.vbs',
 ]
 
 async function bytes(path) {

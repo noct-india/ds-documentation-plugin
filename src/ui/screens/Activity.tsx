@@ -5,8 +5,9 @@
 // without waiting is exactly the case this exists for.
 
 import { useState } from 'react'
-import type { PendingDraft } from '../../shared/types'
+import type { HistoryEntry, PendingDraft } from '../../shared/types'
 import type { ActivityItem, PoolState } from '../bridge'
+import { HistoryList } from '../HistoryList'
 
 interface Props {
   items: ActivityItem[]
@@ -15,6 +16,10 @@ interface Props {
   onCancel: (id: string) => void
   onOpen: (draft: PendingDraft) => void
   onRefreshPending: () => void
+  history: HistoryEntry[]
+  onHistoryDirection: (id: string, direction: 'undo' | 'redo') => void
+  onHistoryUndoAll: () => void
+  onRefreshHistory: () => void
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -31,12 +36,16 @@ export function Activity({
   onCancel,
   onOpen,
   onRefreshPending,
+  history,
+  onHistoryDirection,
+  onHistoryUndoAll,
+  onRefreshHistory,
 }: Props) {
   const busy = items.filter((i) => i.status === 'running')
   const waiting = pending.reduce((n, p) => n + p.draftCount, 0)
   // Land on whichever half has something in it — usually the drafts, since
   // running work finishes and leaves suggestions behind.
-  const [tab, setTab] = useState<'running' | 'waiting'>(
+  const [tab, setTab] = useState<'running' | 'waiting' | 'history'>(
     busy.length === 0 && waiting > 0 ? 'waiting' : 'running'
   )
 
@@ -58,9 +67,26 @@ export function Activity({
         >
           Waiting approval{waiting > 0 ? ` · ${waiting}` : ''}
         </button>
+        <button
+          className={`activity-tab${tab === 'history' ? ' on' : ''}`}
+          onClick={() => {
+            setTab('history')
+            onRefreshHistory()
+          }}
+        >
+          History{history.length > 0 ? ` · ${history.length}` : ''}
+        </button>
       </div>
 
-      {tab === 'waiting' ? (
+      {tab === 'history' ? (
+        <HistoryList
+          entries={history}
+          onDirection={onHistoryDirection}
+          onUndoAll={onHistoryUndoAll}
+          showEntity
+          emptyLabel="No edits yet. Every change you make is recorded here to undo."
+        />
+      ) : tab === 'waiting' ? (
         <Waiting pending={pending} onOpen={onOpen} />
       ) : (
         <Running items={items} pool={pool} busy={busy} onCancel={onCancel} />

@@ -61,17 +61,26 @@ Claude starts the process; there is nothing to run by hand. The plugin finds it 
 Registering it with Claude is optional — the bridge spawns `claude -p` itself when a
 request arrives, so drafting works with nothing but the process running.
 
-Double-click **`Start Claude bridge.command`**, or `node server.mjs`. The launcher exists
-because a bridge owned by a chat session dies with that session and can leave the port
-held; one you started yourself is one you can see and stop. It finds `node` even when
-Finder hands it a bare PATH, installs dependencies on first run, and names whatever is
-already holding the port rather than failing quietly.
+Double-click **`Start Claude bridge.command`** (Mac) or **`Start Claude bridge.cmd`**
+(Windows), or run `node server.mjs`. The launcher exists because a bridge owned by a chat
+session dies with that session and can leave the port held; one you started yourself is one
+you can see and stop. It finds `node` even when Finder (or a bare Windows shell) hands it a
+thin PATH, installs dependencies on first run, and names whatever is already holding the
+port rather than failing quietly.
 
 ### Or never think about it again
 
 `Run bridge at login.command` registers a launchd agent (`in.noct.dsdoc-bridge`) with
 `RunAtLoad` and `KeepAlive`, so the bridge is up from login and comes back if it stops.
 Double-clicking the same file removes it again.
+
+On Windows, `Run bridge at login.cmd` is the counterpart: it registers a per-user logon
+scheduled task (`NOCT DS Bridge`) that starts the bridge with no console window via
+`run-hidden.vbs`, baking the discovered `node` path into `.node-path` so a thin logon PATH
+can't break it. Double-clicking it again deletes the task. A logon task *starts* the bridge
+at every login rather than *supervising* it the way `KeepAlive` does, so a mid-session crash
+is recovered at the next login — or by starting it by hand. Logs go to
+`%LOCALAPPDATA%\NOCT\dsdoc-bridge.log`.
 
 Two details do the real work. The agent's `PATH` is written at install time and includes
 the directory holding `claude` — launchd hands a process almost nothing, and without this

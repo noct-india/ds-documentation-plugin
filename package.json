@@ -12,6 +12,7 @@
     "classify": "esbuild test/classify.ts --bundle --platform=node --format=esm --outfile=dist/classify.mjs && node dist/classify.mjs",
     "check": "npm run typecheck && npm test && npm run build",
     "test:bridge": "node bridge/e2e.mjs",
+    "test:history": "esbuild test/history.ts --bundle --platform=node --format=esm --outfile=dist/history-test.mjs && node dist/history-test.mjs",
     "package": "node package.mjs",
     "test:refs": "node bridge/refcheck.mjs"
   },

@@ -494,6 +494,11 @@ button {
 .bridge-bar.connecting .bridge-dot {
   background: var(--warn);
 }
+/* Other statuses (reading pages, gathering context) share the bar with a blue
+   dot, distinct from the bridge's own green/off dot. */
+.bridge-bar.busy .bridge-dot {
+  background: var(--accent);
+}
 
 .bridge-label {
   flex: 1 1 auto;
@@ -935,6 +940,168 @@ button {
   flex: 0 0 auto;
   border-top: 1px solid var(--border);
   padding: 10px 12px 12px;
+}
+
+/* A pinned "Writing about …" band sitting directly on top of the composer, so
+   the scope a note will carry stays visible while typing. */
+.composer-scope {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 7px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-raised);
+}
+.composer-scope-label {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.composer-scope-value { font-size: 11px; font-weight: 600; color: var(--text); }
+.composer-scope-clear {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--text-faint);
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+.composer-scope-clear:hover { color: var(--text); }
+.composer-scope-reach { font-size: 10px; color: var(--accent); }
+
+/* Right-pane tabs — replace the old stack of viewer / doc / drafts / history. */
+.detail-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+.detail-tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 10px 10px 9px;
+  font-size: 12px;
+  color: var(--text-dim);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.detail-tab:hover {
+  color: var(--text);
+}
+.detail-tab.on {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+.detail-tab-badge {
+  font-size: 10px;
+  min-width: 16px;
+  padding: 0 5px;
+  height: 15px;
+  line-height: 15px;
+  text-align: center;
+  border-radius: 8px;
+  background: var(--bg-raised);
+  color: var(--text-dim);
+}
+.detail-tab.on .detail-tab-badge {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* Reset control + its inline confirm, in the Markup tab. */
+.link-btn.danger {
+  color: var(--danger);
+}
+.btn.danger {
+  background: var(--danger);
+  color: #fff;
+  border-color: var(--danger);
+}
+.reset-confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+/* Edit history — the global History tab and a component's own edit log. */
+.editlog {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+.history-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.history-count {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.history-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.history-row.undone {
+  opacity: 0.55;
+}
+.history-op {
+  flex: 0 0 auto;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: var(--bg-raised);
+  color: var(--text-faint);
+}
+.history-op.add {
+  color: var(--accent);
+}
+.history-op.delete,
+.history-op.reject {
+  color: var(--danger);
+}
+.history-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.history-summary {
+  font-size: 12px;
+  color: var(--text);
+}
+.history-meta {
+  font-size: 10px;
+  color: var(--text-faint);
+}
+.edits {
+  border-top: 1px solid var(--border);
+}
+.edits-toggle {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 9px 12px;
 }
 
 .sections {

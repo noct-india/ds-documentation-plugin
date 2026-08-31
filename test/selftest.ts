@@ -1112,6 +1112,57 @@ section('variants: a variant is documented as itself, not as its set')
   )
 }
 
+section('scope: typed and approved-draft notes render under a When heading')
+
+{
+  // The regression behind the "preview/export dropped Type = Primary" report.
+  // renderEntityDoc — what the live preview AND the per-entity export actually
+  // call — grouped by section only and ignored scope, so a note stored with a
+  // scope still rendered as a whole-set rule. Assert through the REAL renderer,
+  // for both authoring paths (typed, and drafted by Claude then approved).
+  const structure = { typeLabel: 'Component set' }
+  const doc = (host: PluginDataHost) =>
+    renderEntityDoc('Button', 'componentSet', structure, readLog(host), {
+      includeEmptySections: false,
+    })
+
+  const typed = new FakeHost()
+  appendNote(typed, 'componentSet', 'Button', 'Only one per page.', 'usage', 'A', { Type: 'Primary' })
+  check('typed: scope survives storage', JSON.stringify(readLog(typed)[0]?.scope) === '{"Type":"Primary"}')
+  const typedDoc = doc(typed)
+  check('typed: the entity doc emits the scope heading', typedDoc.includes('When Type = Primary'))
+  check(
+    'typed: the scoped note sits under that heading',
+    typedDoc.indexOf('When Type = Primary') < typedDoc.indexOf('Only one per page.')
+  )
+
+  const drafted = new FakeHost()
+  appendDrafts(
+    drafted,
+    'componentSet',
+    'Button',
+    [{ text: 'Reserve for the dominant action.', section: 'usage', scope: { Type: 'Primary' } }],
+    'Claude'
+  )
+  check('draft: scope is stored on the suggestion', JSON.stringify(readLog(drafted)[0]?.scope) === '{"Type":"Primary"}')
+  check('draft: an unapproved suggestion renders nothing', !doc(drafted).includes('Reserve for the dominant action.'))
+  approveDrafts(drafted, 'componentSet', 'Button', null, 'A')
+  check('draft: approval keeps the scope', JSON.stringify(readLog(drafted)[0]?.scope) === '{"Type":"Primary"}')
+  const draftedDoc = doc(drafted)
+  check('draft: the approved suggestion emits the scope heading', draftedDoc.includes('When Type = Primary'))
+  check(
+    'draft: the approved note sits under that heading',
+    draftedDoc.indexOf('When Type = Primary') < draftedDoc.indexOf('Reserve for the dominant action.')
+  )
+
+  // An unscoped note must still render as a plain whole-set rule, no When block.
+  const plain = new FakeHost()
+  appendNote(plain, 'componentSet', 'Button', 'Always keyboard reachable.', 'rules', 'A')
+  const plainDoc = doc(plain)
+  check('unscoped: no When heading is emitted', !plainDoc.includes('When Type'))
+  check('unscoped: it renders under its plain section', plainDoc.includes('Always keyboard reachable.'))
+}
+
 section('export: carries the writing, not what Figma Make already has')
 
 {

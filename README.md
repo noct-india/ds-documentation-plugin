@@ -8,9 +8,10 @@
 > is not visible here. That was a deliberate choice — this code has more surface and the
 > isolation means a bug in it cannot reach work already done.
 >
-> The earlier version is tagged `simple-version` and checked out at
-> `AI implementation/experiments/DS documentation plugin/`, pinned to that tag. To read
-> the notes written with it, run that one. To adopt them here instead, change `id` in
+> The earlier version is the `simple-version` tag **in this repo** — there is no second
+> folder any more (the experiments checkout was retired 2026-08-28). To read the notes
+> written with it, run that tag: `git switch --detach simple-version`, load the plugin,
+> then `git switch -` to come back. To adopt them here instead, change `id` in
 > `manifest.json` back to `ds-documentation-plugin-noct` — one line, and everything
 > written under the old id reappears.
 
@@ -439,8 +440,9 @@ plugin. `bridge/` turns that into reviewing drafts — several times faster than
 
 One Node process bridges the two sides: MCP over stdio to Claude, WebSocket on
 `127.0.0.1:8473` to the plugin. Nothing is written to disk and nothing leaves the machine.
-Double-click `bridge/Start Claude bridge.command` to run it, or register it with Claude and
-let Claude start it. See [`bridge/README.md`](bridge/README.md) for setup.
+Double-click `bridge/Start Claude bridge.command` (Mac) or `bridge\Start Claude bridge.cmd`
+(Windows) to run it, or register it with Claude and let Claude start it. See
+[`bridge/README.md`](bridge/README.md) for setup.
 
 **Start it** in the plugin's status bar tells you where that launcher is — it cannot press
 it for you. A plugin runs in a sandboxed iframe: no filesystem, no processes, and no way to

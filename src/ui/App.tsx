@@ -9,6 +9,7 @@ import type {
   BatchTarget,
   BridgeStatus,
   EntityKind,
+  HistoryEntry,
   HomeState,
   ListItem,
   PendingDraft,
@@ -106,6 +107,10 @@ export function App() {
   const [activity, setActivity] = useState<ActivityItem[]>([])
   const [pool, setPool] = useState<PoolState | null>(null)
   const [pending, setPending] = useState<PendingDraft[]>([])
+  const [history, setHistory] = useState<HistoryEntry[]>([])
+  // A transient activity line for the status bar (blue dot) — e.g. "Reading
+  // pages…" — kept apart from the bridge's own connected/off line (green dot).
+  const [status, setStatus] = useState<string | null>(null)
   const [answer, setAnswer] = useState<{
     threadId: string
     text: string
@@ -138,6 +143,11 @@ export function App() {
     call({ type: 'getPendingDrafts' })
       .then(setPending)
       .catch(() => setPending([]))
+    // The history reflects every change, so it refreshes on the same signal a
+    // note edit does.
+    call({ type: 'getHistory' })
+      .then(setHistory)
+      .catch(() => setHistory([]))
   }, [refreshToken])
 
   // Landing on the canvas selection is the point of the plugin living in Figma.
@@ -165,6 +175,16 @@ export function App() {
   const selectionRef = useRef(selection)
   selectionRef.current = selection
 
+  // The combination the open detail is "writing about", lifted so a Claude draft
+  // request can be made about the same scope. Null when nothing is scoped.
+  const activeScopeRef = useRef<Record<string, string> | null>(null)
+  const reportScope = useCallback((scope: Record<string, string> | null) => {
+    activeScopeRef.current = scope
+  }, [])
+  // Scope to stamp on each draft as it streams back, keyed by the request that
+  // asked for it — suggestions arrive detached from the viewer that set the scope.
+  const draftScopeRef = useRef(new Map<string, Record<string, string>>())
+
   useEffect(
     () =>
       onSelectionChange((targets) => {
@@ -181,7 +201,20 @@ export function App() {
     []
   )
 
-  useEffect(() => onProgress((message) => setToast({ text: message })), [])
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const off = onProgress((message) => {
+      setStatus(message)
+      // Progress arrives as a stream during a long read and simply stops when
+      // it's done, so clear a short while after the last one.
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(() => setStatus(null), 2500)
+    })
+    return () => {
+      off()
+      if (timer) clearTimeout(timer)
+    }
+  }, [])
 
   // ── Claude bridge ─────────────────────────────────────────────────────────
   // Entirely optional: with no bridge running the plugin behaves exactly as it
@@ -323,9 +356,14 @@ export function App() {
 
   useEffect(
     () =>
-      onDrafts(async ({ drafts, done }) => {
+      onDrafts(async ({ requestId, drafts, done }) => {
         try {
-          const result = await call({ type: 'applyDrafts', drafts })
+          // Stamp the request's scope onto each draft, so an approved suggestion
+          // lands under the same heading a typed note would have.
+          const scope = draftScopeRef.current.get(requestId)
+          const payload = scope ? drafts.map((d) => ({ ...d, scope })) : drafts
+          const result = await call({ type: 'applyDrafts', drafts: payload })
+          if (done) draftScopeRef.current.delete(requestId)
           setRefreshToken((n) => n + 1)
           notify(
             done
@@ -347,7 +385,8 @@ export function App() {
    */
   const askClaude = async (
     targets: Array<{ entityId: string; entityKind: EntityKind }>,
-    scope: string
+    scope: string,
+    variantScope?: Record<string, string> | null
   ) => {
     if (!isBridgeConnected()) {
       notify('No bridge running. Start it from Claude, then try again.', true)
@@ -371,6 +410,11 @@ export function App() {
         items,
         context,
       })
+      // Remember the scope this request was made under, so the drafts that stream
+      // back can be stamped with it — they return detached from the viewer.
+      if (id && variantScope && Object.keys(variantScope).length > 0) {
+        draftScopeRef.current.set(id, variantScope)
+      }
       notify(
         id
           ? `Drafting ${items.length} item${items.length === 1 ? '' : 's'}…`
@@ -488,6 +532,7 @@ export function App() {
           onExport={runExport}
           bridge={bridge}
           bridgeHome={bridgeHome}
+          status={status}
           asking={asking}
           busyCount={activity.filter((a) => a.status === 'running').length}
           pendingCount={pending.reduce((n, p) => n + p.draftCount, 0)}
@@ -545,25 +590,6 @@ export function App() {
               <div className="detail-head">
                 <strong>{selection.name}</strong>
                 <span className="detail-kind">{KIND_LABELS[selection.entityKind]}</span>
-                {bridge === 'connected' && selection.entityKind !== 'project' && (
-                  <button
-                    className="btn small"
-                    disabled={asking}
-                    onClick={() =>
-                      askClaude(
-                        [
-                          {
-                            entityId: selection.entityId,
-                            entityKind: selection.entityKind,
-                          },
-                        ],
-                        selection.name
-                      )
-                    }
-                  >
-                    Ask Claude
-                  </button>
-                )}
               </div>
               <Detail
                 key={selection.entityId}
@@ -577,6 +603,34 @@ export function App() {
                 polish={polish}
                 bridgeReady={bridge === 'connected'}
                 answer={answer}
+                onScope={reportScope}
+                onDraft={
+                  selection.entityKind !== 'project'
+                    ? () =>
+                        askClaude(
+                          [{ entityId: selection.entityId, entityKind: selection.entityKind }],
+                          selection.name,
+                          activeScopeRef.current
+                        )
+                    : undefined
+                }
+                history={history.filter((h) => h.entityId === selection.entityId)}
+                onHistoryDirection={(id, direction) =>
+                  call({ type: 'historyUndo', id, direction })
+                    .then((h) => {
+                      setHistory(h)
+                      setRefreshToken((n) => n + 1)
+                    })
+                    .catch((err) => notify((err as Error).message, true))
+                }
+                onHistoryUndoAll={() =>
+                  call({ type: 'historyUndoAll', entityId: selection.entityId })
+                    .then((h) => {
+                      setHistory(h)
+                      setRefreshToken((n) => n + 1)
+                    })
+                    .catch((err) => notify((err as Error).message, true))
+                }
                 onDismissAnswer={() => setAnswer(null)}
                 onAsk={(text) => {
                   const threadId = selection.entityId
@@ -631,6 +685,31 @@ export function App() {
               }
               onOpen={(draft) =>
                 selectEntity(draft.entityId, draft.entityKind, draft.name)
+              }
+              history={history}
+              onHistoryDirection={(id, direction) =>
+                call({ type: 'historyUndo', id, direction })
+                  .then((h) => {
+                    setHistory(h)
+                    setRefreshToken((n) => n + 1)
+                  })
+                  .catch((err) => notify((err as Error).message, true))
+              }
+              onHistoryUndoAll={() =>
+                call({ type: 'historyUndoAll' })
+                  .then((h) => {
+                    setHistory(h)
+                    setRefreshToken((n) => n + 1)
+                    notify('Reversed every change back to a clean slate.')
+                  })
+                  .catch((err) => notify((err as Error).message, true))
+              }
+              onRefreshHistory={() =>
+                call({ type: 'getHistory' })
+                  .then(setHistory)
+                  .catch(() => {
+                    /* the list stays as it was */
+                  })
               }
             />
           ) : (

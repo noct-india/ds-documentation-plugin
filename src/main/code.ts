@@ -24,6 +24,7 @@ import {
   appendNote,
   countDocumented,
   approveDrafts,
+  clearAllEntityData,
   clearBody,
   draftCount,
   editNote,
@@ -43,6 +44,14 @@ import {
   writeDoc,
 } from './storage'
 import { entityExists, resolveEntity } from './reader/entity'
+import {
+  applyDirection as applyHistoryDirection,
+  clearHistoryFor,
+  readHistory,
+  recordHistory,
+  undoAll as undoAllHistory,
+  type Resolve,
+} from './history'
 import { invalidatePreviewCache, renderNode } from './reader/preview'
 import { listCollections, getCollectionTree, invalidateVariableCache } from './reader/variables'
 import { getStyleTree, invalidateStyleCache } from './reader/styles'
@@ -316,6 +325,7 @@ async function handle(request: Request): Promise<unknown> {
       const resolved = await resolveEntity(request.entityId, request.entityKind)
       if (!resolved) throw new Error('That item no longer exists in this file.')
 
+      const before = new Set(readLog(resolved.host).map((e) => e.id))
       applyNotes(
         resolved.host,
         request.entityId,
@@ -324,6 +334,18 @@ async function handle(request: Request): Promise<unknown> {
         request.entries,
         request.scope
       )
+      for (const note of readLog(resolved.host).filter((e) => !before.has(e.id))) {
+        recordHistory(figma.root, {
+          op: 'add',
+          entityId: request.entityId,
+          entityKind: request.entityKind,
+          entityName: resolved.name,
+          noteId: note.id,
+          summary: `Added a ${SECTION_HEADINGS[note.section]} note`,
+          before: { deleted: true },
+          after: { deleted: false },
+        })
+      }
 
       const detail = await buildDetail(request.entityId, request.entityKind)
       writeDoc(resolved.host, detail.markdown)
@@ -360,6 +382,7 @@ async function handle(request: Request): Promise<unknown> {
       const resolved = await resolveEntity(request.entityId, request.entityKind)
       if (!resolved) throw new Error('That item no longer exists in this file.')
 
+      const previous = readLog(resolved.host).find((e) => e.id === request.noteId)?.text
       editNote(
         resolved.host,
         request.entityKind,
@@ -368,6 +391,18 @@ async function handle(request: Request): Promise<unknown> {
         request.text,
         currentAuthor()
       )
+      if (previous !== undefined && previous !== request.text.trim()) {
+        recordHistory(figma.root, {
+          op: 'edit',
+          entityId: request.entityId,
+          entityKind: request.entityKind,
+          entityName: resolved.name,
+          noteId: request.noteId,
+          summary: 'Edited a note',
+          before: { text: previous },
+          after: { text: request.text.trim() },
+        })
+      }
       const detail = await buildDetail(request.entityId, request.entityKind)
       writeDoc(resolved.host, detail.markdown)
       return detail
@@ -475,7 +510,7 @@ async function handle(request: Request): Promise<unknown> {
           resolved.host,
           group.kind,
           resolved.name,
-          group.drafts.map((d) => ({ text: d.text, section: d.section })),
+          group.drafts.map((d) => ({ text: d.text, section: d.section, scope: d.scope })),
           'Claude'
         )
         updateIndex(entityId, group.kind, resolved.name, liveNoteCount(log), draftCount(log))
@@ -489,6 +524,12 @@ async function handle(request: Request): Promise<unknown> {
       if (!resolved) throw new Error('That item no longer exists in this file.')
 
       if (request.action === 'approve') {
+        const approved = readLog(resolved.host).filter(
+          (e) =>
+            e.draft &&
+            !e.deleted &&
+            (request.noteIds === null || request.noteIds.indexOf(e.id) !== -1)
+        )
         const log = approveDrafts(
           resolved.host,
           request.entityKind,
@@ -496,6 +537,18 @@ async function handle(request: Request): Promise<unknown> {
           request.noteIds,
           currentAuthor()
         )
+        for (const note of approved) {
+          recordHistory(figma.root, {
+            op: 'approve',
+            entityId: request.entityId,
+            entityKind: request.entityKind,
+            entityName: resolved.name,
+            noteId: note.id,
+            summary: `Approved a ${SECTION_HEADINGS[note.section]} suggestion`,
+            before: { draft: true },
+            after: { draft: false },
+          })
+        }
         updateIndex(
           request.entityId,
           request.entityKind,
@@ -508,8 +561,21 @@ async function handle(request: Request): Promise<unknown> {
         const log = readLog(resolved.host)
         const ids =
           request.noteIds ?? log.filter((e) => e.draft && !e.deleted).map((e) => e.id)
+        const rejected = log.filter((e) => ids.indexOf(e.id) !== -1)
         for (const id of ids) {
           softDeleteNote(resolved.host, request.entityKind, resolved.name, id)
+        }
+        for (const note of rejected) {
+          recordHistory(figma.root, {
+            op: 'reject',
+            entityId: request.entityId,
+            entityKind: request.entityKind,
+            entityName: resolved.name,
+            noteId: note.id,
+            summary: `Rejected a ${SECTION_HEADINGS[note.section]} suggestion`,
+            before: { deleted: false },
+            after: { deleted: true },
+          })
         }
         const after = readLog(resolved.host)
         updateIndex(
@@ -560,6 +626,16 @@ async function handle(request: Request): Promise<unknown> {
         resolved.name,
         request.noteId
       )
+      recordHistory(figma.root, {
+        op: 'delete',
+        entityId: request.entityId,
+        entityKind: request.entityKind,
+        entityName: resolved.name,
+        noteId: request.noteId,
+        summary: 'Deleted a note',
+        before: { deleted: false },
+        after: { deleted: true },
+      })
       updateIndex(request.entityId, request.entityKind, resolved.name, liveNoteCount(log))
 
       const detail = await buildDetail(request.entityId, request.entityKind)
@@ -571,6 +647,7 @@ async function handle(request: Request): Promise<unknown> {
       const resolved = await resolveEntity(request.entityId, request.entityKind)
       if (!resolved) throw new Error('That item no longer exists in this file.')
 
+      const priorSection = readLog(resolved.host).find((e) => e.id === request.noteId)?.section
       recategorizeNote(
         resolved.host,
         request.entityKind,
@@ -578,6 +655,18 @@ async function handle(request: Request): Promise<unknown> {
         request.noteId,
         request.section
       )
+      if (priorSection !== undefined && priorSection !== request.section) {
+        recordHistory(figma.root, {
+          op: 'recategorize',
+          entityId: request.entityId,
+          entityKind: request.entityKind,
+          entityName: resolved.name,
+          noteId: request.noteId,
+          summary: `Moved a note to ${SECTION_HEADINGS[request.section]}`,
+          before: { section: priorSection },
+          after: { section: request.section },
+        })
+      }
       const detail = await buildDetail(request.entityId, request.entityKind)
       writeDoc(resolved.host, detail.markdown)
       return detail
@@ -630,6 +719,38 @@ async function handle(request: Request): Promise<unknown> {
         maxPx: request.maxPx,
         overrides: request.overrides,
       })
+
+    case 'getHistory':
+      return readHistory(figma.root, request.entityId)
+
+    case 'historyUndo': {
+      const resolve: Resolve = async (entityId, entityKind) => {
+        const r = await resolveEntity(entityId, entityKind)
+        return r ? { host: r.host, name: r.name } : null
+      }
+      await applyHistoryDirection(figma.root, resolve, request.id, request.direction)
+      return readHistory(figma.root)
+    }
+
+    case 'historyUndoAll': {
+      const resolve: Resolve = async (entityId, entityKind) => {
+        const r = await resolveEntity(entityId, entityKind)
+        return r ? { host: r.host, name: r.name } : null
+      }
+      await undoAllHistory(figma.root, resolve, request.entityId)
+      return readHistory(figma.root)
+    }
+
+    case 'clearEntity': {
+      const resolved = await resolveEntity(request.entityId, request.entityKind)
+      if (!resolved) throw new Error('That item no longer exists in this file.')
+      // Wipe the node clean — notes, body, doc cache, and any stale keys from
+      // earlier builds — then drop this item's history and reset its count.
+      clearAllEntityData(resolved.host)
+      clearHistoryFor(figma.root, request.entityId)
+      updateIndex(request.entityId, request.entityKind, resolved.name, 0)
+      return buildDetail(request.entityId, request.entityKind)
+    }
 
     default: {
       const exhaustive: never = request

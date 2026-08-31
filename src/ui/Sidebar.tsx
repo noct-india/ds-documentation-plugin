@@ -52,6 +52,8 @@ interface Props {
   bridge: BridgeStatus
   /** Bridge folder learned from a previous connection; null until there's been one. */
   bridgeHome: string | null
+  /** A transient activity line (e.g. "Reading pages…"), shown with a blue dot. */
+  status: string | null
   asking: boolean
   busyCount: number
   pendingCount: number
@@ -133,6 +135,13 @@ export function Sidebar(props: Props) {
 
       {showStarter && (
         <StartBridge home={props.bridgeHome} onClose={() => setShowStarter(false)} />
+      )}
+
+      {props.status && (
+        <div className="bridge-bar busy">
+          <span className="bridge-dot" />
+          <span className="bridge-label">{props.status}</span>
+        </div>
       )}
 
       <div className={`bridge-bar ${props.bridge}`} title={BRIDGE_HINT[props.bridge]}>

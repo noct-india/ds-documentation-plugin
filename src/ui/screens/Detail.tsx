@@ -5,13 +5,14 @@
 // is an override, not a prerequisite.
 
 import { useEffect, useRef, useState } from 'react'
-import type { EntityDetail, EntityKind, SectionKey } from '../../shared/types'
+import type { EntityDetail, EntityKind, HistoryEntry, SectionKey } from '../../shared/types'
 import type { PolishState } from '../bridge'
 import { SECTION_LABELS, migrateSection, sectionsFor } from '../../shared/types'
 import { call } from '../rpc'
 import { Composer, type ComposerEntry, type SendMode } from '../Composer'
 import { ComponentViewer, type WriteTarget } from '../ComponentViewer'
-import { describeScope, scopeApplies, scopeDepth } from '../../shared/variants'
+import { describeScope, scopeApplies, scopeDepth, scopeReach } from '../../shared/variants'
+import { HistoryList } from '../HistoryList'
 import { Drafts } from '../Drafts'
 import { Swatch } from '../Swatch'
 import { Target } from '../icons'
@@ -36,6 +37,18 @@ interface Props {
   /** The session's last reply about this entity, if any. */
   answer: { text: string; pending: boolean; error?: string } | null
   onDismissAnswer: () => void
+  /**
+   * Reports the combination the composer is currently writing about, so a draft
+   * request made from the detail header can be about the same scope. Null when
+   * nothing is scoped.
+   */
+  onScope?: (scope: Record<string, string> | null) => void
+  /** This entity's slice of the edit history, and controls to reverse it. */
+  history?: HistoryEntry[]
+  onHistoryDirection?: (id: string, direction: 'undo' | 'redo') => void
+  onHistoryUndoAll?: () => void
+  /** Ask Claude to draft this entity — the AI-drafts tab's button. */
+  onDraft?: () => void
 }
 
 /** The opened entity, as the target notes go to until someone says otherwise. */
@@ -56,7 +69,14 @@ export function Detail({
   bridgeReady,
   answer,
   onDismissAnswer,
+  onScope,
+  history,
+  onHistoryDirection,
+  onHistoryUndoAll,
+  onDraft,
 }: Props) {
+  const [tab, setTab] = useState<'variants' | 'markup' | 'history' | 'drafts'>('markup')
+  const [resetArmed, setResetArmed] = useState(false)
   const [detail, setDetail] = useState<EntityDetail | null>(null)
   const [saving, setSaving] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
@@ -123,6 +143,29 @@ export function Detail({
     if (opening) setChosen(opening.properties)
   }, [shell])
 
+  // Load the opened entity's notes and structure, and reload when the write
+  // target moves to a variant so the notes below follow it. The same first fetch
+  // seeds the viewer while the target is still the opened entity, so the picture
+  // costs no extra call. Without this the detail pane never leaves "Loading…".
+  useEffect(() => {
+    let cancelled = false
+    setDetail(null)
+    setRefiling(null)
+    setEditing(null)
+    call({ type: 'getEntity', entityId: target.entityId, entityKind: target.entityKind })
+      .then((d) => {
+        if (cancelled) return
+        setDetail(d)
+        if (d.entityId === entityId) setShell(d)
+      })
+      .catch((err: Error) => {
+        if (!cancelled) onError(err.message)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [target.entityId, target.entityKind])
+
   // The scope the composer will stamp on a note: the ticked properties, at the
   // values currently on screen.
   const scope: Record<string, string> = {}
@@ -130,6 +173,16 @@ export function Detail({
     if (chosen[property] !== undefined) scope[property] = chosen[property]
   }
   const scoping = Object.keys(scope).length > 0
+
+  // Lift the active scope so a Claude draft request made from the detail header
+  // can be about the same combination the composer is. Stringified dependency so
+  // it fires only on a real change; reset on unmount so a closed detail leaves
+  // nothing stale behind for the next request.
+  const scopeSignature = scoping ? JSON.stringify(scope) : ''
+  useEffect(() => {
+    onScope?.(scoping ? scope : null)
+    return () => onScope?.(null)
+  }, [scopeSignature, onScope])
 
   // Every write goes to the target, never to the opened entity. One place to
   // read, so a new call site cannot quietly write to the wrong thing.
@@ -242,6 +295,23 @@ export function Detail({
     }
   }
 
+  // A full clean slate for this item — every note, edit, and history entry, and
+  // any stale markers earlier plugin builds left on the node. Deliberately about
+  // the opened entity, never the write target.
+  const resetEntity = async () => {
+    setSaving(true)
+    try {
+      setDetail(await call({ type: 'clearEntity', entityId, entityKind }))
+      setResetArmed(false)
+      setEditing(null)
+      onSaved()
+    } catch (err) {
+      onError((err as Error).message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const refile = async (noteId: string, section: SectionKey) => {
     setRefiling(null)
     try {
@@ -258,7 +328,7 @@ export function Detail({
   // the picker have no reason to disappear while that happens, and unmounting
   // them is what used to reset the picker.
   const viewer =
-    shell !== null && editing === null && (entityKind === 'component' || entityKind === 'componentSet') ? (
+    shell !== null && (entityKind === 'component' || entityKind === 'componentSet') ? (
       <ComponentViewer
         entityId={entityId}
         name={name}
@@ -307,21 +377,78 @@ export function Detail({
   const filled = new Set(liveEntries.map((e) => migrateSection(e.section)))
   const sections = sectionsFor(target.entityKind)
 
+  const isComponent = entityKind === 'component' || entityKind === 'componentSet'
+  const draftItems = detail.log.filter((e) => e.draft && !e.deleted)
+  const tabDefs = [
+    ...(isComponent ? [{ key: 'variants' as const, label: 'Variants', badge: 0 }] : []),
+    { key: 'markup' as const, label: 'Markup', badge: 0 },
+    { key: 'history' as const, label: 'History', badge: history?.length ?? 0 },
+    { key: 'drafts' as const, label: 'AI drafts', badge: draftItems.length },
+  ]
+  const activeTab = tabDefs.some((t) => t.key === tab) ? tab : 'markup'
+
+  // Reach of the current scope, for the single "Writing about" strip.
+  const allVariants = shell?.structure.variants ?? []
+  const reach = scoping ? scopeReach(allVariants, scope) : allVariants.length
+
   return (
     <>
+      <div className="detail-tabs">
+        {tabDefs.map((t) => (
+          <button
+            key={t.key}
+            className={`detail-tab${activeTab === t.key ? ' on' : ''}`}
+            onClick={() => setTab(t.key)}
+          >
+            {t.label}
+            {t.badge ? <span className="detail-tab-badge">{t.badge}</span> : null}
+          </button>
+        ))}
+      </div>
+
       <div className="body">
-        {viewer}
-        {editing === null && (
-          <Drafts
-            drafts={detail.log.filter((e) => e.draft && !e.deleted)}
-            entityKind={target.entityKind}
-            busy={saving}
-            onApprove={(ids) => review(ids, 'approve')}
-            onReject={(ids) => review(ids, 'reject')}
-            onEdit={editDraft}
+        {activeTab === 'variants' && viewer}
+
+        {activeTab === 'drafts' &&
+          (draftItems.length > 0 ? (
+            <Drafts
+              drafts={draftItems}
+              entityKind={target.entityKind}
+              busy={saving}
+              onApprove={(ids) => review(ids, 'approve')}
+              onReject={(ids) => review(ids, 'reject')}
+              onEdit={editDraft}
+            />
+          ) : (
+            <div className="state">
+              No AI drafts yet.
+              {onDraft && bridgeReady ? (
+                <div style={{ marginTop: 12 }}>
+                  <button className="btn primary" onClick={onDraft}>
+                    Ask Claude to draft this
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <br />
+                  Start the Claude bridge to draft with AI.
+                </>
+              )}
+            </div>
+          ))}
+
+        {activeTab === 'history' && (
+          <HistoryList
+            entries={history ?? []}
+            onDirection={onHistoryDirection ?? (() => undefined)}
+            onUndoAll={onHistoryUndoAll}
+            emptyLabel="No edits yet on this item. Every change here can be undone."
           />
         )}
-        {editing !== null ? (
+
+        {activeTab === 'markup' && (
+          <>
+            {editing !== null ? (
           <>
             {/* Only the authored half is editable. The tables above it are
                 regenerated from Figma on every open, so an edit there would be
@@ -377,6 +504,30 @@ export function Detail({
                 <span className="doc-flag">
                   hand-edited — new notes are appended, not regenerated
                 </span>
+              )}
+              {resetArmed ? (
+                <span className="reset-confirm">
+                  Wipe every note, edit &amp; history entry for this item?
+                  <button className="btn danger small" onClick={resetEntity} disabled={saving}>
+                    Reset everything
+                  </button>
+                  <button
+                    className="btn small"
+                    onClick={() => setResetArmed(false)}
+                    disabled={saving}
+                  >
+                    Cancel
+                  </button>
+                </span>
+              ) : (
+                <button
+                  className="link-btn danger"
+                  style={{ marginLeft: 'auto' }}
+                  onClick={() => setResetArmed(true)}
+                  title="Clear everything for this item, including stale markers left by earlier plugin builds"
+                >
+                  Reset
+                </button>
               )}
             </div>
           </>
@@ -493,6 +644,8 @@ export function Detail({
               })}
           </div>
         )}
+          </>
+        )}
       </div>
 
       {polish.phase !== 'idle' && (
@@ -527,6 +680,29 @@ export function Detail({
             {answer.error ?? answer.text ?? ''}
             {answer.pending && !answer.text && <span className="polish-spinner" />}
           </div>
+        </div>
+      )}
+
+      {(entityKind === 'component' || entityKind === 'componentSet') && (
+        // Pinned directly above the input so what a note will be about is always
+        // in view while typing — the viewer's own strip scrolls away with it.
+        <div className="composer-scope">
+          <span className="composer-scope-label">Writing about</span>
+          <span className="composer-scope-value">
+            {scoping ? describeScope(scope) : `${name} — every variant`}
+          </span>
+          {allVariants.length > 0 && (
+            <span className="composer-scope-reach">
+              {scoping
+                ? `${reach} of ${allVariants.length} variants`
+                : `all ${allVariants.length} variants`}
+            </span>
+          )}
+          {scoping && (
+            <button className="composer-scope-clear" onClick={() => setScoped([])}>
+              clear
+            </button>
+          )}
         </div>
       )}
 
